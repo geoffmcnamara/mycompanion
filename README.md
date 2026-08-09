@@ -6,11 +6,19 @@ Designed for minimal friction and maximum speed, it runs quietly as a single-ins
 ✨ Features
 Global Hotkey Toggle: Press Ctrl + Space from anywhere in your operating system to instantly pull up or hide the application window.
 
-Tab 1: Notes – A clean, distraction-free markdown/text scratchpad with automatic saving.
+Tab 1: Notes – Ctrl-1: A clean, distraction-free markdown/text scratchpad with automatic saving.
 
-Tab 2: Calculator & History – Type out standard math expressions and hit Enter. Keeps an automatic, reverse-chronological history log (most recent at the top) saved across sessions.
+Tab 2: Calculator & History – Ctrl-2:  Type out standard math expressions and hit Enter. Keeps an automatic, reverse-chronological history log (most recent at the top) saved across sessions.
 
-Tab 3: Calendar & Calendar Notes – Displays a side-by-side view of the current and next month with today's date dynamically highlighted in bright yellow, backed by dedicated calendar notes.
+Tab 3: Calendar & Calendar Notes – Ctrl-3: Displays a side-by-side view of the current and next month with today's date dynamically highlighted in bright yellow, backed by dedicated calendar notes.
+
+Optional AI Gemini Query and Response – Ctrl-a
+
+SETUP GEMINI AI: (if you want AI Query/Response)
+  1. Generate an API key at: https://aistudio.google.com/app/apikey 
+     (create project name, import projects, create project api_key - this is subject to change) 
+  2. Export the key in your terminal session before launching:
+     export GEMINI_API_KEY="AIzaSyYourKeyHere"
 
 Live Header Clock: Displays the current date, live time, and day of the week at a glance.
 
@@ -29,6 +37,10 @@ Bash
 pip install pynput
 🚀 Running the App
 Clone the repository and run the script directly from your terminal:
+  
+Install these if you want to use Gemini AI
+pip install google-genai 
+pip install tiktoken --prefer-binary # only if your system complains that it is missing
 
 Bash
 python mycompanion.py

@@ -1,0 +1,4 @@
+# requirements-ai.txt (Optional AI features)
+--prefer-binary
+google-genai
+tiktoken

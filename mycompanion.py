@@ -1,7 +1,7 @@
 #!/home/geoffm/dev/python/venv/bin/python
 """
 =======================
-    companion.py
+     mycompanion.py
 =======================
 
 Run this app from the command line.
@@ -9,7 +9,22 @@ The program becomes resident in memory and can be called up with Ctrl-space
 Toggle is closed with the Ctrl-space
 Switch tabs with the mouse or Ctrl-1, Ctrl-2, Ctrl-3 (when window is active).
 While it is up - hit Ctrl-q to quit out of the program completely
+Hit Ctrl-a to toggle the Gemini AI input bar on/off.
+Pass --ai on command line to start with Gemini bar visible by default.
+ Ctrl-space     toggle main window
+    Ctrl-1      notes tab
+    Ctrl-2      calculator tab
+    Ctrl-3      calendar tab
+    Ctrl-a      toggle AI query input 
 
+SETUP GEMINI AI:
+  1. Generate an API key at: https://aistudio.google.com/app/apikey (create project name, import projects, create project api_key)
+  2. Export the key in your terminal session before launching:
+     export GEMINI_API_KEY="AIzaSyYourKeyHere"
+
+    Enjoy!
+
+companionway.net © 2026
 """
 
 import sys
@@ -19,9 +34,8 @@ import os
 import subprocess
 import calendar
 import datetime
-# from pathlib import Path
+import threading
 
-# ROOTNAME = Path(__file__).stem
 ROOTNAME = "mycompanion"
 LOCK_FILE = os.path.expanduser(f"~/{ROOTNAME}.lock")
 
@@ -43,8 +57,11 @@ def ensure_daemon():
     if os.environ.get("SIDEKICK_DAEMON") != "1":
         new_env = os.environ.copy()
         new_env["SIDEKICK_DAEMON"] = "1"
+        
+        # Pass along any original arguments like --ai to the daemon process
+        args = [python_exec, script_path] + sys.argv[1:]
         subprocess.Popen(
-            [python_exec, script_path],
+            args,
             env=new_env,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -57,18 +74,17 @@ def ensure_daemon():
             f.write(str(os.getpid()))
 
 class MiniSidekick:
-    def __init__(self):
+    def __init__(self, start_with_ai=False):
         self.note_file = os.path.expanduser(f"~/{ROOTNAME}_notes.txt")
         self.cal_notes_file = os.path.expanduser(f"~/{ROOTNAME}_cal_notes.txt")
         self.calc_history_file = os.path.expanduser(f"~/{ROOTNAME}_calc_notes.txt")
         
         self.root = tk.Tk()
         self.root.title(os.path.basename(__file__))
-        self.root.geometry("640x500")
+        self.root.geometry("640x500") # Base size without AI bar
         self.root.attributes("-topmost", True)
         self.root.withdraw()
         
-        # Initialize with today's date so it doesn't trigger an immediate redraw mismatch on startup
         self.last_checked_date = datetime.datetime.now().date()
         
         # Header frame for Date, Title, and Time
@@ -91,6 +107,19 @@ class MiniSidekick:
         tk.Button(self.nav_frame, text="1. Notes", command=lambda: self.switch_view("notes"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
+
+        # AI Query Input Bar (Optional / Toggable)
+        self.ai_frame = tk.Frame(self.root, bg="#252526", pady=6, padx=10)
+
+        ai_label = tk.Label(self.ai_frame, text="Gemini:", bg="#252526", fg="#4ec9b0", font=("Monospace", 9, "bold"))
+        ai_label.pack(side=tk.LEFT, padx=(0, 5))
+
+        self.ai_input = tk.Entry(self.ai_frame, font=("Monospace", 10), bg="#333333", fg="#d4d4d4", insertbackground="white", bd=0)
+        self.ai_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=3)
+        self.ai_input.bind("<Return>", self.send_to_gemini_click)
+
+        ai_btn = tk.Button(self.ai_frame, text="Ask", command=self.send_to_gemini_click, bg="#333", fg="#fff", bd=0, padx=10, pady=2)
+        ai_btn.pack(side=tk.RIGHT)
 
         # Main Content Container
         self.content_frame = tk.Frame(self.root)
@@ -125,7 +154,6 @@ class MiniSidekick:
         self.calc_result = tk.Label(self.calc_frame, text="Type an expression and hit Enter (e.g., 45 * 12)", font=("Monospace", 10), bg="#1e1e1e", fg="#888")
         self.calc_result.pack(padx=15, anchor="w")
 
-        # Calculator History Section (Most recent at the top)
         history_label = tk.Label(self.calc_frame, text="Calculation History:", font=("Monospace", 10, "bold"), bg="#1e1e1e", fg="#888", anchor="w")
         history_label.pack(padx=15, pady=(15, 5), anchor="w")
 
@@ -159,11 +187,16 @@ class MiniSidekick:
         self.cal_notes_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=15, pady=10)
         self.load_cal_notes()
 
+        # State tracking for AI bar visibility
+        self.ai_visible = False
+        if start_with_ai:
+            self.toggle_ai_bar(force_state=True)
+
         # Start on notes view
         self.current_view = None
         self.switch_view("notes")
 
-        # Start the clock loop now that all UI elements exist
+        # Start the clock loop
         self.update_header_clock()
 
         # ### Bindings & Controls #### #
@@ -176,24 +209,15 @@ class MiniSidekick:
         for ctrl_seq in ("<Control-3>", "<Control-Key-3>"):
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("cal"))
 
+        # Global toggle for AI bar: Ctrl+a / Ctrl+A
+        self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
+        self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
+
         self.root.bind("<Control-q>", lambda event: self.quit_app())
         self.root.bind("<Control-Q>", lambda event: self.quit_app())
         
-        self.root.bind("<Control-q>", lambda event: self.quit_app())
         self.text_area.bind("<Control-q>", lambda event: self.quit_app())
         self.calc_display.bind("<Control-q>", lambda event: self.quit_app())
-        
-        self.root.bind("<Control-1>", lambda event: self.switch_view("notes"))
-        self.text_area.bind("<Control-1>", lambda event: self.switch_view("notes"))
-        self.calc_display.bind("<Control-1>", lambda event: self.switch_view("notes"))
-
-        self.root.bind("<Control-2>", lambda event: self.switch_view("calc"))
-        self.text_area.bind("<Control-2>", lambda event: self.switch_view("calc"))
-        self.calc_display.bind("<Control-2>", lambda event: self.switch_view("calc"))
-
-        self.root.bind("<Control-3>", lambda event: self.switch_view("cal"))
-        self.text_area.bind("<Control-3>", lambda event: self.switch_view("cal"))
-        self.calc_display.bind("<Control-3>", lambda event: self.switch_view("cal"))
         
         self.is_visible = False
         self.hotkey_listener = None
@@ -201,6 +225,93 @@ class MiniSidekick:
     def handle_tab_shortcut(self, view_name):
         self.switch_view(view_name)
         return "break"
+
+    def toggle_ai_bar(self, force_state=None):
+        if force_state is not None:
+            self.ai_visible = not force_state # Will flip to match target via toggle block below
+            
+        current_geometry = self.root.geometry().split("+")[0]
+        w, h = map(int, current_geometry.split("x"))
+
+        if self.ai_visible:
+            # Hide AI bar
+            self.ai_frame.pack_forget()
+            self.ai_visible = False
+            self.root.geometry(f"{w}x{max(400, h - 45)}")
+        else:
+            # Show AI bar at bottom
+            self.ai_frame.pack(side=tk.BOTTOM, fill=tk.X)
+            self.ai_visible = True
+            self.root.geometry(f"{w}x{h + 45}")
+            self.ai_input.focus_set()
+
+        return "break"
+
+    def send_to_gemini_click(self, event=None):
+        query = self.ai_input.get().strip()
+        if not query:
+            return
+        self.ai_input.delete(0, tk.END)
+        threading.Thread(target=self._fetch_gemini_response, args=(query,), daemon=True).start()
+
+    def _fetch_gemini_response(self, query):
+        # Lazy import keeps startup fast!
+        try:
+            from google import genai
+            client = genai.Client()
+            response = client.models.generate_content(
+                model='gemini-3.5-flash',
+                contents=query
+            )
+            answer = response.text
+        except Exception as e:
+            answer = f"Error calling Gemini API:\n{str(e)}"
+        
+        self.root.after(0, lambda: self.open_response_window(query, answer))
+
+    def open_response_window(self, query, answer):
+        win = tk.Toplevel(self.root)
+        win.title(f"Gemini: {query[:35]}...")
+        win.geometry("550x450")
+        win.attributes("-topmost", True)
+        win.configure(bg="#1e1e1e")
+
+        q_label = tk.Label(win, text=f"Q: {query}", bg="#252526", fg="#9cdcfe", font=("Monospace", 9, "bold"), anchor="w", padx=10, pady=6)
+        q_label.pack(side=tk.TOP, fill=tk.X)
+
+        text_box = tk.Text(win, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", insertbackground="white", font=("Monospace", 10), bd=0, padx=10, pady=10)
+        text_box.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        text_box.insert("1.0", answer)
+        text_box.config(state=tk.DISABLED, exportselection=True)  # Read-only but fully highlightable/copyable
+
+        ctrl_frame = tk.Frame(win, bg="#2d2d2d", pady=6, padx=10)
+        ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        def copy_text():
+            win.clipboard_clear()
+            win.clipboard_append(text_box.get("1.0", tk.END).strip())
+            copy_btn.config(text="Copied!")
+            win.after(1500, lambda: copy_btn.config(text="Copy"))
+
+        copy_btn = tk.Button(ctrl_frame, text="Copy", command=copy_text, bg="#333", fg="#fff", bd=0, padx=10, pady=4)
+        copy_btn.pack(side=tk.LEFT, padx=5)
+
+        editable = [False]
+        def toggle_edit():
+            if editable[0]:
+                text_box.config(state=tk.DISABLED)
+                edit_btn.config(text="Edit")
+                editable[0] = False
+            else:
+                text_box.config(state=tk.NORMAL)
+                edit_btn.config(text="Lock")
+                editable[0] = True
+
+        edit_btn = tk.Button(ctrl_frame, text="Edit", command=toggle_edit, bg="#333", fg="#fff", bd=0, padx=10, pady=4)
+        edit_btn.pack(side=tk.LEFT, padx=5)
+
+        close_btn = tk.Button(ctrl_frame, text="Close", command=win.destroy, bg="#510", fg="#fff", bd=0, padx=10, pady=4)
+        close_btn.pack(side=tk.RIGHT, padx=5)
 
     def update_header_clock(self):
         now = datetime.datetime.now()
@@ -244,7 +355,6 @@ class MiniSidekick:
             result_str = f"= {result}"
             self.calc_result.config(text=result_str, fg="#4ec9b0")
             
-            # Prepend calculation history (most recent at the top)
             history_entry = f"{expr}  -->  {result}\n"
             self.calc_history_text.config(state=tk.NORMAL)
             self.calc_history_text.insert("1.0", history_entry)
@@ -256,7 +366,6 @@ class MiniSidekick:
 
     def load_calendar(self):
         now = datetime.datetime.now()
-        
         next_month_date = now.replace(day=28) + datetime.timedelta(days=4)
         
         cal = calendar.TextCalendar(calendar.SUNDAY)
@@ -277,7 +386,6 @@ class MiniSidekick:
         self.cal_text.delete("1.0", tk.END)
         self.cal_text.insert("1.0", final_cal_str)
         
-        # Highlight today's date in bright yellow on dark gray background
         self.cal_text.tag_config("today", foreground="#ffe600", background="#333333", font=("Monospace", 10, "bold"))
         
         today_str = str(now.day)
@@ -337,7 +445,7 @@ class MiniSidekick:
         screen_height = self.root.winfo_screenheight()
         
         window_width = 640
-        window_height = 520
+        window_height = 545 if self.ai_visible else 500
         
         x = (screen_width // 2) - (window_width // 2)
         y = (screen_height // 2) - (window_height // 2)
@@ -348,7 +456,9 @@ class MiniSidekick:
         self.root.lift()
         self.root.focus_force()
         
-        if self.current_view == "notes":
+        if self.ai_visible:
+            self.ai_input.focus_set()
+        elif self.current_view == "notes":
             self.text_area.focus_set()
         elif self.current_view == "calc":
             self.calc_display.focus_set()
@@ -384,9 +494,11 @@ class MiniSidekick:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print(__doc__)
-    else:
-        ensure_daemon()
-        app = MiniSidekick()
-        app.run()
+    print(__doc__)
+    # if len(sys.argv) > 1 and sys.argv[1] == "--help":
+        # print(__doc__)
+    # else:
+    ensure_daemon()
+    start_ai = "--ai" in sys.argv
+    app = MiniSidekick(start_with_ai=start_ai)
+    app.run()
