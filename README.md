@@ -1,6 +1,6 @@
 # MyCompanion
 
-MyCompanion is a lightning-fast, lightweight desktop assistant that stays resident in the background, giving you instant access to quick notes, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey.
+MyCompanion is a lightning-fast, lightweight desktop assistant that stays resident in the background, giving you instant access to quick notes, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey. Optional Gemini AI query and response.
 
 Designed for minimal friction and maximum speed, it runs quietly as a single-instance daemon and stays out of your way until you need it.
 
