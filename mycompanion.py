@@ -1,4 +1,4 @@
-#!/home/geoffm/dev/python/venv/bin/python
+#!/usr/bin/env python3
 """
 =======================
      mycompanion.py
