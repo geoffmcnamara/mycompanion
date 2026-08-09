@@ -1,9 +1,10 @@
-MyCompanion
+# MyCompanion
+
 MyCompanion is a lightning-fast, lightweight desktop assistant that stays resident in the background, giving you instant access to quick notes, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey.
 
 Designed for minimal friction and maximum speed, it runs quietly as a single-instance daemon and stays out of your way until you need it.
 
-✨ Features
+## ✨ Features
 Global Hotkey Toggle: Press Ctrl + Space from anywhere in your operating system to instantly pull up or hide the application window.
 
 Tab 1: Notes – Ctrl-1: A clean, distraction-free markdown/text scratchpad with automatic saving.
@@ -24,7 +25,7 @@ Live Header Clock: Displays the current date, live time, and day of the week at 
 
 Fast Navigation Shortcuts: Switch tabs instantly using Ctrl+1, Ctrl+2, or Ctrl+3, and quit cleanly with Ctrl+Q.
 
-🛠️ Prerequisites
+## 🛠️ Prerequisites
 Python 3.x
 
 Tkinter (usually bundled with Python on Linux/macOS/Windows)
@@ -46,7 +47,7 @@ Bash
 python mycompanion.py
 On first launch, the program automatically spawns as a background daemon, handles its own lock fileing, and listens for your Ctrl + Space toggle.
 
-📁 Generated Files
+## 📁 Generated Files
 To keep your data persistent between sessions, the app automatically creates local text files in your home directory based on the script's root name:
 
 ~/{rootname}_notes.txt
@@ -54,3 +55,6 @@ To keep your data persistent between sessions, the app automatically creates loc
 ~/{rootname}_cal_notes.txt
 
 ~/{rootname}_calc_notes.txt
+
+also uses when running:
+~/.{rootname}.lock
