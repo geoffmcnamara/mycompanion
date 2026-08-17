@@ -57,4 +57,5 @@ To keep your data persistent between sessions, the app automatically creates loc
 ~/{rootname}_calc_notes.txt
 
 also uses when running:
+
 ~/.{rootname}.lock

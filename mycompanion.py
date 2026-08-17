@@ -6,18 +6,19 @@
 
 Run this app from the command line.
 The program becomes resident in memory and can be called up with Ctrl-space
-Toggle is closed with the Ctrl-space
-Switch tabs with the mouse or Ctrl-1, Ctrl-2, Ctrl-3 (when window is active).
+Toggle open or closed with the Ctrl-space
 While it is up - hit Ctrl-q to quit out of the program completely
 Hit Ctrl-a to toggle the Gemini AI input bar on/off.
 Pass --ai on command line to start with Gemini bar visible by default.
+Pass -h or --help to display this help and storage locations.
  Ctrl-space     toggle main window
     Ctrl-1      notes tab
     Ctrl-2      calculator tab
     Ctrl-3      calendar tab
     Ctrl-a      toggle AI query input 
+    Ctrl-q      quit (removes program from memory - but data is preserved in files)
 
-SETUP GEMINI AI:
+SETUP GEMINI AI (optional): 
   1. Generate an API key at: https://aistudio.google.com/app/apikey (create project name, import projects, create project api_key)
   2. Export the key in your terminal session before launching:
      export GEMINI_API_KEY="AIzaSyYourKeyHere"
@@ -27,27 +28,77 @@ SETUP GEMINI AI:
 companionway.net © 2026
 """
 
+import os
 import sys
 import tkinter as tk
 from pynput import keyboard
-import os
 import subprocess
 import calendar
 import datetime
 import threading
+from pathlib import Path
 
 ROOTNAME = "mycompanion"
-LOCK_FILE = os.path.expanduser(f"~/{ROOTNAME}.lock")
+TITLE = "MyCompanion"
+VERSION = "0.1.0"
+
+# Determine base directories based on the operating system
+if sys.platform == "darwin":
+    # macOS convention: ~/Library/Application Support/
+    DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
+    STATE_DIR = DATA_DIR
+elif sys.platform == "win32":
+    # Windows convention: AppData\Local
+    appdata = os.environ.get("APPDATA")
+    DATA_DIR = (Path(appdata) / ROOTNAME) if appdata else (Path.home() / "AppData" / "Local" / ROOTNAME)
+    STATE_DIR = DATA_DIR
+else:
+    # Linux / Unix convention: XDG Base Directory Specification
+    xdg_data = os.environ.get("XDG_DATA_HOME")
+    DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
+    xdg_state = os.environ.get("XDG_STATE_HOME")
+    STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".local" / "state" / ROOTNAME)
+
+# Ensure the directories exist
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+STATE_DIR.mkdir(parents=True, exist_ok=True)
+
+# Define clean file paths
+NOTES_FILE = DATA_DIR / f"{ROOTNAME}_notes.txt"
+CAL_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_cal_notes.txt"
+CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
+LOCK_FILE = STATE_DIR / f"{ROOTNAME}.lock"
+
+
+def print_help_and_paths():
+    print(__doc__)
+    print("----------------------------------------")
+    print("Storage & Runtime Locations:")
+    print(f"  • Data / Store Directory : {DATA_DIR}")
+    print(f"  • Notes File             : {NOTES_FILE}")
+    print(f"  • Calendar Notes File    : {CAL_NOTES_FILE}")
+    print(f"  • Calculator History File: {CALC_NOTES_FILE}")
+    print(f"  • Lock File              : {LOCK_FILE}")
+    print("----------------------------------------\n")
+
 
 def ensure_daemon():
     script_path = os.path.abspath(__file__)
     python_exec = sys.executable
     
+    # Handle explicit help flags
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print_help_and_paths()
+        sys.exit(0)
+
     if os.path.exists(LOCK_FILE):
         try:
             with open(LOCK_FILE, "r") as f:
                 old_pid = int(f.read().strip())
             os.kill(old_pid, 0)
+            print(f"MyCompanion is already running (PID {old_pid}).")
+            print(f"Use Ctrl-space to toggle the window.")
+            print(f"Lock file location: {LOCK_FILE}")
             sys.exit(0)
         except (ProcessLookupError, ValueError):
             os.remove(LOCK_FILE)
@@ -55,10 +106,12 @@ def ensure_daemon():
             sys.exit(0)
 
     if os.environ.get("SIDEKICK_DAEMON") != "1":
+        # Print docstring and active store/lock file locations on initial launch terminal output
+        print_help_and_paths()
+
         new_env = os.environ.copy()
         new_env["SIDEKICK_DAEMON"] = "1"
         
-        # Pass along any original arguments like --ai to the daemon process
         args = [python_exec, script_path] + sys.argv[1:]
         subprocess.Popen(
             args,
@@ -75,27 +128,30 @@ def ensure_daemon():
 
 class MiniSidekick:
     def __init__(self, start_with_ai=False):
-        self.note_file = os.path.expanduser(f"~/{ROOTNAME}_notes.txt")
-        self.cal_notes_file = os.path.expanduser(f"~/{ROOTNAME}_cal_notes.txt")
-        self.calc_history_file = os.path.expanduser(f"~/{ROOTNAME}_calc_notes.txt")
+        self.note_file = NOTES_FILE
+        self.cal_notes_file = CAL_NOTES_FILE
+        self.calc_history_file = CALC_NOTES_FILE
         
         self.root = tk.Tk()
         self.root.title(os.path.basename(__file__))
-        self.root.geometry("640x500") # Base size without AI bar
+        self.root.geometry("640x500") 
         self.root.attributes("-topmost", True)
         self.root.withdraw()
         
         self.last_checked_date = datetime.datetime.now().date()
         
-        # Header frame for Date, Title, and Time
+        # Header frame for Date, Title, Time, and Version
         self.header_frame = tk.Frame(self.root, bg="#1a1a1a", pady=5, padx=10)
         self.header_frame.pack(side=tk.TOP, fill=tk.X)
 
         self.date_label = tk.Label(self.header_frame, text="", bg="#1a1a1a", fg="#9cdcfe", font=("Monospace", 9))
         self.date_label.pack(side=tk.LEFT)
 
-        self.title_label = tk.Label(self.header_frame, text=f"{ROOTNAME}", bg="#1a1a1a", fg="#fff", font=("Monospace", 10, "bold"))
+        self.title_label = tk.Label(self.header_frame, text=f"{TITLE}", bg="#1a1a1a", fg="#fff", font=("Monospace", 10, "bold"))
         self.title_label.pack(side=tk.LEFT, expand=True)
+
+        self.version_label = tk.Label(self.header_frame, text=f" v{VERSION}", bg="#1a1a1a", fg="#888888", font=("Monospace", 9))
+        self.version_label.pack(side=tk.RIGHT)
 
         self.time_label = tk.Label(self.header_frame, text="", bg="#1a1a1a", fg="#4ec9b0", font=("Monospace", 9))
         self.time_label.pack(side=tk.RIGHT)
@@ -108,7 +164,7 @@ class MiniSidekick:
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # AI Query Input Bar (Optional / Toggable)
+        # AI Query Input Bar
         self.ai_frame = tk.Frame(self.root, bg="#252526", pady=6, padx=10)
 
         ai_label = tk.Label(self.ai_frame, text="Gemini:", bg="#252526", fg="#4ec9b0", font=("Monospace", 9, "bold"))
@@ -125,9 +181,7 @@ class MiniSidekick:
         self.content_frame = tk.Frame(self.root)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
-        # --------------------------
         # --- VIEW 1: NOTES ---
-        # --------------------------
         self.notes_frame = tk.Frame(self.content_frame)
         self.text_area = tk.Text(
             self.notes_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
@@ -136,9 +190,7 @@ class MiniSidekick:
         self.text_area.pack(fill=tk.BOTH, expand=True)
         self.load_notes()
 
-        # --------------------------
         # --- VIEW 2: CALCULATOR ---
-        # --------------------------
         self.calc_frame = tk.Frame(self.content_frame, bg="#1e1e1e")
         
         input_container = tk.Frame(self.calc_frame, bg="#1e1e1e")
@@ -165,9 +217,7 @@ class MiniSidekick:
         self.calc_history_text.config(state=tk.DISABLED)
         self.load_calc_history()
 
-        # --------------------------
         # --- VIEW 3: CALENDAR ---
-        # --------------------------
         self.cal_frame = tk.Frame(self.content_frame, bg="#1e1e1e")
         
         self.cal_text = tk.Text(
@@ -192,14 +242,11 @@ class MiniSidekick:
         if start_with_ai:
             self.toggle_ai_bar(force_state=True)
 
-        # Start on notes view
         self.current_view = None
         self.switch_view("notes")
-
-        # Start the clock loop
         self.update_header_clock()
 
-        # ### Bindings & Controls #### #
+        # Bindings & Controls
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         
         for ctrl_seq in ("<Control-1>", "<Control-Key-1>"):
@@ -209,7 +256,6 @@ class MiniSidekick:
         for ctrl_seq in ("<Control-3>", "<Control-Key-3>"):
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("cal"))
 
-        # Global toggle for AI bar: Ctrl+a / Ctrl+A
         self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
         self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
 
@@ -228,18 +274,16 @@ class MiniSidekick:
 
     def toggle_ai_bar(self, force_state=None):
         if force_state is not None:
-            self.ai_visible = not force_state # Will flip to match target via toggle block below
+            self.ai_visible = not force_state 
             
         current_geometry = self.root.geometry().split("+")[0]
         w, h = map(int, current_geometry.split("x"))
 
         if self.ai_visible:
-            # Hide AI bar
             self.ai_frame.pack_forget()
             self.ai_visible = False
             self.root.geometry(f"{w}x{max(400, h - 45)}")
         else:
-            # Show AI bar at bottom
             self.ai_frame.pack(side=tk.BOTTOM, fill=tk.X)
             self.ai_visible = True
             self.root.geometry(f"{w}x{h + 45}")
@@ -255,12 +299,11 @@ class MiniSidekick:
         threading.Thread(target=self._fetch_gemini_response, args=(query,), daemon=True).start()
 
     def _fetch_gemini_response(self, query):
-        # Lazy import keeps startup fast!
         try:
             from google import genai
             client = genai.Client()
             response = client.models.generate_content(
-                model='gemini-3.5-flash',
+                model='gemini-2.5-flash',
                 contents=query
             )
             answer = response.text
@@ -282,7 +325,7 @@ class MiniSidekick:
         text_box = tk.Text(win, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", insertbackground="white", font=("Monospace", 10), bd=0, padx=10, pady=10)
         text_box.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         text_box.insert("1.0", answer)
-        text_box.config(state=tk.DISABLED, exportselection=True)  # Read-only but fully highlightable/copyable
+        text_box.config(state=tk.DISABLED, exportselection=True)
 
         ctrl_frame = tk.Frame(win, bg="#2d2d2d", pady=6, padx=10)
         ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
@@ -494,10 +537,6 @@ class MiniSidekick:
 
 
 if __name__ == "__main__":
-    print(__doc__)
-    # if len(sys.argv) > 1 and sys.argv[1] == "--help":
-        # print(__doc__)
-    # else:
     ensure_daemon()
     start_ai = "--ai" in sys.argv
     app = MiniSidekick(start_with_ai=start_ai)
