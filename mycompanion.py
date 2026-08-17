@@ -40,7 +40,7 @@ from pathlib import Path
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 # Determine base directories based on the operating system
 if sys.platform == "darwin":
