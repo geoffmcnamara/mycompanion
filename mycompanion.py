@@ -5,13 +5,22 @@
 =======================
 
 Run this app from the command line.
+
+Usage:
+    mycompanion.py [--ai] [--vim]
+    mycompanion.py (-h | --help)
+
+Options:
+    -h --help    Show this help and storage locations.
+    --ai         Start with Gemini AI input bar visible.
+    --vim        Enable external Vim editor buttons and shortcuts for notes.
+
 The program becomes resident in memory and can be called up with Ctrl-space
 Toggle open or closed with the Ctrl-space
 While it is up - hit Ctrl-q to quit out of the program completely
 Hit Ctrl-a to toggle the Gemini AI input bar on/off.
-Pass --ai on command line to start with Gemini bar visible by default.
-Pass -h or --help to display this help and storage locations.
- Ctrl-space     toggle main window
+
+    Ctrl-space     toggle main window
     Ctrl-1      notes tab
     Ctrl-2      calculator tab
     Ctrl-3      calendar tab
@@ -37,33 +46,31 @@ import calendar
 import datetime
 import threading
 from pathlib import Path
+import tempfile
+from docopt import docopt
+
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.2.0"
+VERSION = "0.2.2"
 
 # Determine base directories based on the operating system
 if sys.platform == "darwin":
-    # macOS convention: ~/Library/Application Support/
     DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
     STATE_DIR = DATA_DIR
 elif sys.platform == "win32":
-    # Windows convention: AppData\Local
     appdata = os.environ.get("APPDATA")
     DATA_DIR = (Path(appdata) / ROOTNAME) if appdata else (Path.home() / "AppData" / "Local" / ROOTNAME)
     STATE_DIR = DATA_DIR
 else:
-    # Linux / Unix convention: XDG Base Directory Specification
     xdg_data = os.environ.get("XDG_DATA_HOME")
     DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
     xdg_state = os.environ.get("XDG_STATE_HOME")
     STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".local" / "state" / ROOTNAME)
 
-# Ensure the directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
 
-# Define clean file paths
 NOTES_FILE = DATA_DIR / f"{ROOTNAME}_notes.txt"
 CAL_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_cal_notes.txt"
 CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
@@ -85,11 +92,6 @@ def print_help_and_paths():
 def ensure_daemon():
     script_path = os.path.abspath(__file__)
     python_exec = sys.executable
-    
-    # Handle explicit help flags
-    if "-h" in sys.argv or "--help" in sys.argv:
-        print_help_and_paths()
-        sys.exit(0)
 
     if os.path.exists(LOCK_FILE):
         try:
@@ -106,7 +108,6 @@ def ensure_daemon():
             sys.exit(0)
 
     if os.environ.get("SIDEKICK_DAEMON") != "1":
-        # Print docstring and active store/lock file locations on initial launch terminal output
         print_help_and_paths()
 
         new_env = os.environ.copy()
@@ -127,10 +128,11 @@ def ensure_daemon():
             f.write(str(os.getpid()))
 
 class MiniSidekick:
-    def __init__(self, start_with_ai=False):
+    def __init__(self, start_with_ai=False, use_vim=False):
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
         self.calc_history_file = CALC_NOTES_FILE
+        self.use_vim = use_vim
         
         self.root = tk.Tk()
         self.root.title(os.path.basename(__file__))
@@ -140,7 +142,6 @@ class MiniSidekick:
         
         self.last_checked_date = datetime.datetime.now().date()
         
-        # Header frame for Date, Title, Time, and Version
         self.header_frame = tk.Frame(self.root, bg="#1a1a1a", pady=5, padx=10)
         self.header_frame.pack(side=tk.TOP, fill=tk.X)
 
@@ -156,7 +157,6 @@ class MiniSidekick:
         self.time_label = tk.Label(self.header_frame, text="", bg="#1a1a1a", fg="#4ec9b0", font=("Monospace", 9))
         self.time_label.pack(side=tk.RIGHT)
 
-        # Top tab navigation frame
         self.nav_frame = tk.Frame(self.root, bg="#2d2d2d")
         self.nav_frame.pack(side=tk.TOP, fill=tk.X)
         
@@ -164,7 +164,6 @@ class MiniSidekick:
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # AI Query Input Bar
         self.ai_frame = tk.Frame(self.root, bg="#252526", pady=6, padx=10)
 
         ai_label = tk.Label(self.ai_frame, text="Gemini:", bg="#252526", fg="#4ec9b0", font=("Monospace", 9, "bold"))
@@ -177,18 +176,28 @@ class MiniSidekick:
         ai_btn = tk.Button(self.ai_frame, text="Ask", command=self.send_to_gemini_click, bg="#333", fg="#fff", bd=0, padx=10, pady=2)
         ai_btn.pack(side=tk.RIGHT)
 
-        # Main Content Container
         self.content_frame = tk.Frame(self.root)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
         # --- VIEW 1: NOTES ---
         self.notes_frame = tk.Frame(self.content_frame)
+        if self.use_vim:
+            notes_ctrl_frame = tk.Frame(self.notes_frame, bg="#2d2d2d", pady=4, padx=10)
+            notes_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
+            tk.Label(notes_ctrl_frame, text="Notes (Vim Editor Mode - Press Ctrl-E)", bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold")).pack(side=tk.LEFT)
+            tk.Button(notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
+
         self.text_area = tk.Text(
             self.notes_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
             insertbackground="white", font=("Monospace", 11), bd=0, padx=10, pady=10
         )
         self.text_area.pack(fill=tk.BOTH, expand=True)
         self.load_notes()
+
+        if self.use_vim:
+            self.text_area.config(state=tk.DISABLED)
+            self.text_area.bind("<Control-e>", lambda e: self.open_in_vim(self.note_file, self.text_area))
+            self.text_area.bind("<Control-E>", lambda e: self.open_in_vim(self.note_file, self.text_area))
 
         # --- VIEW 2: CALCULATOR ---
         self.calc_frame = tk.Frame(self.content_frame, bg="#1e1e1e")
@@ -227,8 +236,14 @@ class MiniSidekick:
         self.cal_text.pack(side=tk.TOP, fill=tk.X, expand=False)
         self.load_calendar()
 
-        cal_notes_label = tk.Label(self.cal_frame, text="Calendar Notes:", font=("Monospace", 10, "bold"), bg="#1e1e1e", fg="#9cdcfe", anchor="w")
-        cal_notes_label.pack(side=tk.TOP, fill=tk.X, padx=15, pady=(5, 0))
+        cal_notes_header_frame = tk.Frame(self.cal_frame, bg="#1e1e1e")
+        cal_notes_header_frame.pack(side=tk.TOP, fill=tk.X, padx=15, pady=(5, 0))
+
+        cal_notes_label = tk.Label(cal_notes_header_frame, text="Calendar Notes:", font=("Monospace", 10, "bold"), bg="#1e1e1e", fg="#9cdcfe", anchor="w")
+        cal_notes_label.pack(side=tk.LEFT)
+
+        if self.use_vim:
+            tk.Button(cal_notes_header_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.cal_notes_file, self.cal_notes_text), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.cal_notes_text = tk.Text(
             self.cal_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
@@ -237,7 +252,11 @@ class MiniSidekick:
         self.cal_notes_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=15, pady=10)
         self.load_cal_notes()
 
-        # State tracking for AI bar visibility
+        if self.use_vim:
+            self.cal_notes_text.config(state=tk.DISABLED)
+            self.cal_notes_text.bind("<Control-e>", lambda e: self.open_in_vim(self.cal_notes_file, self.cal_notes_text))
+            self.cal_notes_text.bind("<Control-E>", lambda e: self.open_in_vim(self.cal_notes_file, self.cal_notes_text))
+
         self.ai_visible = False
         if start_with_ai:
             self.toggle_ai_bar(force_state=True)
@@ -246,7 +265,6 @@ class MiniSidekick:
         self.switch_view("notes")
         self.update_header_clock()
 
-        # Bindings & Controls
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
         
         for ctrl_seq in ("<Control-1>", "<Control-Key-1>"):
@@ -267,6 +285,55 @@ class MiniSidekick:
         
         self.is_visible = False
         self.hotkey_listener = None
+
+    def open_in_vim(self, file_path, text_widget):
+        text_widget.config(state=tk.NORMAL)
+        content = text_widget.get("1.0", tk.END).strip()
+        with open(file_path, "w") as f:
+            f.write(content)
+
+        editor = os.environ.get("EDITOR", "vim")
+        was_visible = self.is_visible
+        if was_visible:
+            self.root.withdraw()
+            self.is_visible = False
+
+        # Spawn editor inside a new terminal emulator window so background daemonization doesn't break TTY
+        terminals = [
+            ["x-terminal-emulator", "-e"],
+            ["gnome-terminal", "--"],
+            ["konsole", "-e"],
+            ["xfce4-terminal", "-e"],
+            ["xterm", "-e"]
+        ]
+        
+        launched = False
+        for term_cmd in terminals:
+            try:
+                # Check if terminal command exists/works
+                subprocess.Popen(term_cmd + [editor, str(file_path)]).wait()
+                launched = True
+                break
+            except (FileNotFoundError, Exception):
+                continue
+        
+        if not launched:
+            # Fallback direct call if no terminal launcher is found
+            try:
+                subprocess.call([editor, str(file_path)])
+            except Exception as e:
+                print(f"Error launching editor {editor}: {e}")
+
+        text_widget.delete("1.0", tk.END)
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                text_widget.insert("1.0", f.read())
+
+        if self.use_vim:
+            text_widget.config(state=tk.DISABLED)
+
+        if was_visible:
+            self.show_window()
 
     def handle_tab_shortcut(self, view_name):
         self.switch_view(view_name)
@@ -462,10 +529,11 @@ class MiniSidekick:
                 self.calc_history_text.config(state=tk.DISABLED)
 
     def save_notes(self):
-        with open(self.note_file, "w") as f:
-            f.write(self.text_area.get("1.0", tk.END).strip())
-        with open(self.cal_notes_file, "w") as f:
-            f.write(self.cal_notes_text.get("1.0", tk.END).strip())
+        if not self.use_vim:
+            with open(self.note_file, "w") as f:
+                f.write(self.text_area.get("1.0", tk.END).strip())
+            with open(self.cal_notes_file, "w") as f:
+                f.write(self.cal_notes_text.get("1.0", tk.END).strip())
         with open(self.calc_history_file, "w") as f:
             f.write(self.calc_history_text.get("1.0", tk.END).strip())
 
@@ -538,6 +606,13 @@ class MiniSidekick:
 
 if __name__ == "__main__":
     ensure_daemon()
-    start_ai = "--ai" in sys.argv
-    app = MiniSidekick(start_with_ai=start_ai)
+    try:
+        args = docopt(__doc__, version=VERSION)
+    except Exception:
+        args = {"--ai": "--ai" in sys.argv, "--vim": "--vim" in sys.argv}
+
+    start_ai = args.get("--ai", False)
+    use_vim = args.get("--vim", False)
+
+    app = MiniSidekick(start_with_ai=start_ai, use_vim=use_vim)
     app.run()
