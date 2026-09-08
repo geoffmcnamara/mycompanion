@@ -39,7 +39,7 @@ pip install pynput
 🚀 Running the App
 Clone the repository and run the script directly from your terminal:
   
-Install these if you want to use Gemini AI
+(Optional) Install these if you want to use Gemini AI
 pip install google-genai 
 pip install tiktoken --prefer-binary # only if your system complains that it is missing
 
@@ -50,12 +50,14 @@ On first launch, the program automatically spawns as a background daemon, handle
 ## 📁 Generated Files
 To keep your data persistent between sessions, the app automatically creates local text files in your home directory based on the script's root name:
 
-~/{rootname}_notes.txt
+~/r<platform_dependant>/{rootname}_notes.txt
 
-~/{rootname}_cal_notes.txt
+~/<platform_dependant>/{rootname}_cal_notes.txt
 
-~/{rootname}_calc_notes.txt
+~/<platform_dependant>/{rootname}_calc_notes.txt
 
 also uses when running:
 
-~/.{rootname}.lock
+~/<platform_dependant>/{rootname}.lock
+
+Enjoy!
