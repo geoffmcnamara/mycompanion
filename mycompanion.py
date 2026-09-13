@@ -13,7 +13,7 @@ Usage:
 Options:
     -h --help    Show this help and storage locations.
     --ai         Start with Gemini AI input bar visible.
-    --vim        Enable external Vim editor buttons and shortcuts for notes.
+    --vim        Enable external Vim editor buttons and shortcuts for notes/todos.
 
 The program becomes resident in memory and can be called up with Ctrl-space
 Toggle open or closed with the Ctrl-space
@@ -24,7 +24,9 @@ Hit Ctrl-a to toggle the Gemini AI input bar on/off.
     Ctrl-1      notes tab
     Ctrl-2      calculator tab
     Ctrl-3      calendar tab
+    Ctrl-4      todo tab
     Ctrl-a      toggle AI query input 
+    Ctrl-s      save selected text as file
     Ctrl-q      quit (removes program from memory - but data is preserved in files)
 
 SETUP GEMINI AI (optional): 
@@ -40,6 +42,7 @@ companionway.net © 2026
 import os
 import sys
 import tkinter as tk
+from tkinter import filedialog, messagebox
 from pynput import keyboard
 import subprocess
 import calendar
@@ -52,7 +55,7 @@ from docopt import docopt
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.2.2"
+VERSION = "0.3.0"
 
 # Determine base directories based on the operating system
 if sys.platform == "darwin":
@@ -74,6 +77,7 @@ STATE_DIR.mkdir(parents=True, exist_ok=True)
 NOTES_FILE = DATA_DIR / f"{ROOTNAME}_notes.txt"
 CAL_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_cal_notes.txt"
 CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
+TODO_FILE = DATA_DIR / f"{ROOTNAME}_todo.txt"
 LOCK_FILE = STATE_DIR / f"{ROOTNAME}.lock"
 
 
@@ -85,6 +89,7 @@ def print_help_and_paths():
     print(f"  • Notes File             : {NOTES_FILE}")
     print(f"  • Calendar Notes File    : {CAL_NOTES_FILE}")
     print(f"  • Calculator History File: {CALC_NOTES_FILE}")
+    print(f"  • To-Do File             : {TODO_FILE}")
     print(f"  • Lock File              : {LOCK_FILE}")
     print("----------------------------------------\n")
 
@@ -132,6 +137,7 @@ class MiniSidekick:
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
         self.calc_history_file = CALC_NOTES_FILE
+        self.todo_file = TODO_FILE
         self.use_vim = use_vim
         
         self.root = tk.Tk()
@@ -163,6 +169,7 @@ class MiniSidekick:
         tk.Button(self.nav_frame, text="1. Notes", command=lambda: self.switch_view("notes"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        tk.Button(self.nav_frame, text="4. Todo", command=lambda: self.switch_view("todo"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         self.ai_frame = tk.Frame(self.root, bg="#252526", pady=6, padx=10)
 
@@ -181,10 +188,15 @@ class MiniSidekick:
         
         # --- VIEW 1: NOTES ---
         self.notes_frame = tk.Frame(self.content_frame)
+        notes_ctrl_frame = tk.Frame(self.notes_frame, bg="#2d2d2d", pady=4, padx=10)
+        notes_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        lbl_notes = "Notes (Vim Editor Mode - Press Ctrl-E)" if self.use_vim else "Notes"
+        tk.Label(notes_ctrl_frame, text=lbl_notes, bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold")).pack(side=tk.LEFT)
+        
+        tk.Button(notes_ctrl_frame, text="Save selected-text as: <filename>", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        
         if self.use_vim:
-            notes_ctrl_frame = tk.Frame(self.notes_frame, bg="#2d2d2d", pady=4, padx=10)
-            notes_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
-            tk.Label(notes_ctrl_frame, text="Notes (Vim Editor Mode - Press Ctrl-E)", bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold")).pack(side=tk.LEFT)
             tk.Button(notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.text_area = tk.Text(
@@ -242,6 +254,8 @@ class MiniSidekick:
         cal_notes_label = tk.Label(cal_notes_header_frame, text="Calendar Notes:", font=("Monospace", 10, "bold"), bg="#1e1e1e", fg="#9cdcfe", anchor="w")
         cal_notes_label.pack(side=tk.LEFT)
 
+        tk.Button(cal_notes_header_frame, text="Save Sel As...", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+
         if self.use_vim:
             tk.Button(cal_notes_header_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.cal_notes_file, self.cal_notes_text), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
@@ -256,6 +270,31 @@ class MiniSidekick:
             self.cal_notes_text.config(state=tk.DISABLED)
             self.cal_notes_text.bind("<Control-e>", lambda e: self.open_in_vim(self.cal_notes_file, self.cal_notes_text))
             self.cal_notes_text.bind("<Control-E>", lambda e: self.open_in_vim(self.cal_notes_file, self.cal_notes_text))
+
+        # --- VIEW 4: TODO ---
+        self.todo_frame = tk.Frame(self.content_frame)
+        todo_ctrl_frame = tk.Frame(self.todo_frame, bg="#2d2d2d", pady=4, padx=10)
+        todo_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
+        
+        lbl_todo = "To-Do (Vim Editor Mode - Press Ctrl-E)" if self.use_vim else "To-Do"
+        tk.Label(todo_ctrl_frame, text=lbl_todo, bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold")).pack(side=tk.LEFT)
+        
+        tk.Button(todo_ctrl_frame, text="Save Sel As...", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+
+        if self.use_vim:
+            tk.Button(todo_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.todo_file, self.todo_text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
+
+        self.todo_text_area = tk.Text(
+            self.todo_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
+            insertbackground="white", font=("Monospace", 11), bd=0, padx=10, pady=10
+        )
+        self.todo_text_area.pack(fill=tk.BOTH, expand=True)
+        self.load_todo()
+
+        if self.use_vim:
+            self.todo_text_area.config(state=tk.DISABLED)
+            self.todo_text_area.bind("<Control-e>", lambda e: self.open_in_vim(self.todo_file, self.todo_text_area))
+            self.todo_text_area.bind("<Control-E>", lambda e: self.open_in_vim(self.todo_file, self.todo_text_area))
 
         self.ai_visible = False
         if start_with_ai:
@@ -273,6 +312,18 @@ class MiniSidekick:
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("calc"))
         for ctrl_seq in ("<Control-3>", "<Control-Key-3>"):
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("cal"))
+        for ctrl_seq in ("<Control-4>", "<Control-Key-4>"):
+            self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("todo"))
+
+        # Save Selected As Hotkeys
+        self.root.bind("<Control-s>", self.save_selected_as)
+        self.root.bind("<Control-S>", self.save_selected_as)
+        self.text_area.bind("<Control-s>", self.save_selected_as)
+        self.text_area.bind("<Control-S>", self.save_selected_as)
+        self.todo_text_area.bind("<Control-s>", self.save_selected_as)
+        self.todo_text_area.bind("<Control-S>", self.save_selected_as)
+        self.cal_notes_text.bind("<Control-s>", self.save_selected_as)
+        self.cal_notes_text.bind("<Control-S>", self.save_selected_as)
 
         self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
         self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
@@ -282,9 +333,48 @@ class MiniSidekick:
         
         self.text_area.bind("<Control-q>", lambda event: self.quit_app())
         self.calc_display.bind("<Control-q>", lambda event: self.quit_app())
+        self.todo_text_area.bind("<Control-q>", lambda event: self.quit_app())
         
         self.is_visible = False
         self.hotkey_listener = None
+
+    def save_selected_as(self, event=None):
+        widget = None
+        if self.current_view == "notes":
+            widget = self.text_area
+        elif self.current_view == "todo":
+            widget = self.todo_text_area
+        elif self.current_view == "cal":
+            widget = self.cal_notes_text
+
+        if not widget:
+            return "break"
+
+        try:
+            selected_text = widget.get("sel.first", "sel.last")
+        except tk.TclError:
+            messagebox.showinfo("Save Selected Text", "Please select text first before saving.")
+            return "break"
+
+        if not selected_text.strip():
+            messagebox.showinfo("Save Selected Text", "Selected text is empty.")
+            return "break"
+
+        file_path = filedialog.asksaveasfilename(
+            title="Save Selected Text As...",
+            defaultextension=".txt",
+            filetypes=[("Text Files", "*.txt"), ("All Files", "*.*")]
+        )
+
+        if file_path:
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(selected_text)
+                messagebox.showinfo("Success", f"Saved selection to:\n{file_path}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to save file:\n{str(e)}")
+
+        return "break"
 
     def open_in_vim(self, file_path, text_widget):
         text_widget.config(state=tk.NORMAL)
@@ -292,38 +382,61 @@ class MiniSidekick:
         with open(file_path, "w") as f:
             f.write(content)
 
-        editor = os.environ.get("EDITOR", "vim")
-        was_visible = self.is_visible
-        if was_visible:
-            self.root.withdraw()
-            self.is_visible = False
+        self.root.attributes("-topmost", False)
 
-        # Spawn editor inside a new terminal emulator window so background daemonization doesn't break TTY
+        self.root.update_idletasks()
+        try:
+            main_x = self.root.winfo_x()
+            main_y = self.root.winfo_y()
+        except Exception:
+            main_x, main_y = 100, 100
+
+        offset_x = main_x + 40
+        offset_y = max(30, main_y - 120)
+
+        editor = os.environ.get("EDITOR", "vim")
         terminals = [
+            ["xterm", "-geometry", f"82x28+{offset_x}+{offset_y}", "-e"],
             ["x-terminal-emulator", "-e"],
             ["gnome-terminal", "--"],
             ["konsole", "-e"],
-            ["xfce4-terminal", "-e"],
-            ["xterm", "-e"]
+            ["xfce4-terminal", "-e"]
         ]
-        
-        launched = False
-        for term_cmd in terminals:
-            try:
-                # Check if terminal command exists/works
-                subprocess.Popen(term_cmd + [editor, str(file_path)]).wait()
-                launched = True
-                break
-            except (FileNotFoundError, Exception):
-                continue
-        
-        if not launched:
-            # Fallback direct call if no terminal launcher is found
-            try:
-                subprocess.call([editor, str(file_path)])
-            except Exception as e:
-                print(f"Error launching editor {editor}: {e}")
 
+        def launch_and_wait(ed, terms):
+            proc = None
+            launched = False
+            for term_cmd in terms:
+                try:
+                    proc = subprocess.Popen(term_cmd + [ed, str(file_path)])
+                    launched = True
+                    break
+                except (FileNotFoundError, Exception):
+                    continue
+
+            if not launched:
+                try:
+                    proc = subprocess.Popen([ed, str(file_path)])
+                    launched = True
+                except Exception as e:
+                    print(f"Error launching editor {ed}: {e}")
+                    self.root.after(0, lambda: self.root.attributes("-topmost", True))
+                    return
+
+            if proc:
+                proc.wait()
+
+            def cleanup():
+                self._reload_widget_content(file_path, text_widget)
+                self.root.attributes("-topmost", True)
+                self.root.lift()
+
+            self.root.after(0, cleanup)
+
+        threading.Thread(target=launch_and_wait, args=(editor, terminals), daemon=True).start()
+
+    def _reload_widget_content(self, file_path, text_widget):
+        text_widget.config(state=tk.NORMAL)
         text_widget.delete("1.0", tk.END)
         if os.path.exists(file_path):
             with open(file_path, "r") as f:
@@ -331,9 +444,6 @@ class MiniSidekick:
 
         if self.use_vim:
             text_widget.config(state=tk.DISABLED)
-
-        if was_visible:
-            self.show_window()
 
     def handle_tab_shortcut(self, view_name):
         self.switch_view(view_name)
@@ -443,6 +553,7 @@ class MiniSidekick:
         self.notes_frame.pack_forget()
         self.calc_frame.pack_forget()
         self.cal_frame.pack_forget()
+        self.todo_frame.pack_forget()
         
         if view_name == "notes":
             self.notes_frame.pack(fill=tk.BOTH, expand=True)
@@ -455,6 +566,10 @@ class MiniSidekick:
         elif view_name == "cal":
             self.cal_frame.pack(fill=tk.BOTH, expand=True)
             self.current_view = "cal"
+        elif view_name == "todo":
+            self.todo_frame.pack(fill=tk.BOTH, expand=True)
+            self.todo_text_area.focus_set()
+            self.current_view = "todo"
 
     def evaluate_calc(self, event):
         expr = self.calc_display.get().strip()
@@ -528,12 +643,26 @@ class MiniSidekick:
                 self.calc_history_text.insert("1.0", f.read())
                 self.calc_history_text.config(state=tk.DISABLED)
 
+    def load_todo(self):
+        if os.path.exists(self.todo_file) and os.path.getsize(self.todo_file) > 0:
+            with open(self.todo_file, "r") as f:
+                self.todo_text_area.insert("1.0", f.read())
+        else:
+            default_todo = (
+                "=== High Priority ===\n\n"
+                "=== Medium Priority ===\n\n"
+                "=== Low Priority ===\n"
+            )
+            self.todo_text_area.insert("1.0", default_todo)
+
     def save_notes(self):
         if not self.use_vim:
             with open(self.note_file, "w") as f:
                 f.write(self.text_area.get("1.0", tk.END).strip())
             with open(self.cal_notes_file, "w") as f:
                 f.write(self.cal_notes_text.get("1.0", tk.END).strip())
+            with open(self.todo_file, "w") as f:
+                f.write(self.todo_text_area.get("1.0", tk.END).strip())
         with open(self.calc_history_file, "w") as f:
             f.write(self.calc_history_text.get("1.0", tk.END).strip())
 
@@ -573,6 +702,8 @@ class MiniSidekick:
             self.text_area.focus_set()
         elif self.current_view == "calc":
             self.calc_display.focus_set()
+        elif self.current_view == "todo":
+            self.todo_text_area.focus_set()
             
         self.is_visible = True 
 
