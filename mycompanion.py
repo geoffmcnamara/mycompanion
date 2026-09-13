@@ -30,7 +30,7 @@ Hit Ctrl-a to toggle the Gemini AI input bar on/off.
     Ctrl-q      quit (removes program from memory - but data is preserved in files)
 
 SETUP GEMINI AI (optional): 
-  1. Generate an API key at: https://aistudio.google.com/app/apikey (create project name, import projects, create project api_key)
+  1. Generate an API key at: https://aistudio.google.com/app/apikey
   2. Export the key in your terminal session before launching:
      export GEMINI_API_KEY="AIzaSyYourKeyHere"
 
@@ -49,15 +49,13 @@ import calendar
 import datetime
 import threading
 from pathlib import Path
-import tempfile
 from docopt import docopt
 
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.3.0"
+VERSION = "0.3.1"
 
-# Determine base directories based on the operating system
 if sys.platform == "darwin":
     DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
     STATE_DIR = DATA_DIR
@@ -132,6 +130,7 @@ def ensure_daemon():
         with open(LOCK_FILE, "w") as f:
             f.write(str(os.getpid()))
 
+
 class MiniSidekick:
     def __init__(self, start_with_ai=False, use_vim=False):
         self.note_file = NOTES_FILE
@@ -148,6 +147,7 @@ class MiniSidekick:
         
         self.last_checked_date = datetime.datetime.now().date()
         
+        # --- TOP HEADER ---
         self.header_frame = tk.Frame(self.root, bg="#1a1a1a", pady=5, padx=10)
         self.header_frame.pack(side=tk.TOP, fill=tk.X)
 
@@ -163,6 +163,7 @@ class MiniSidekick:
         self.time_label = tk.Label(self.header_frame, text="", bg="#1a1a1a", fg="#4ec9b0", font=("Monospace", 9))
         self.time_label.pack(side=tk.RIGHT)
 
+        # --- NAVIGATION BAR ---
         self.nav_frame = tk.Frame(self.root, bg="#2d2d2d")
         self.nav_frame.pack(side=tk.TOP, fill=tk.X)
         
@@ -170,19 +171,22 @@ class MiniSidekick:
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="4. Todo", command=lambda: self.switch_view("todo"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        tk.Button(self.nav_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bg="#333", fg="#4ec9b0", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        self.ai_frame = tk.Frame(self.root, bg="#252526", pady=6, padx=10)
+        # --- BOTTOM AI BAR (Packed at bottom before content area) ---
+        self.ai_frame = tk.Frame(self.root, bg="#252526", pady=8, padx=10)
 
-        ai_label = tk.Label(self.ai_frame, text="Gemini:", bg="#252526", fg="#4ec9b0", font=("Monospace", 9, "bold"))
-        ai_label.pack(side=tk.LEFT, padx=(0, 5))
+        ai_label = tk.Label(self.ai_frame, text="Gemini:", bg="#252526", fg="#4ec9b0", font=("Monospace", 10, "bold"))
+        ai_label.pack(side=tk.LEFT, padx=(0, 8))
 
-        self.ai_input = tk.Entry(self.ai_frame, font=("Monospace", 10), bg="#333333", fg="#d4d4d4", insertbackground="white", bd=0)
-        self.ai_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5), ipady=3)
+        self.ai_input = tk.Entry(self.ai_frame, font=("Monospace", 10), bg="#333333", fg="#d4d4d4", insertbackground="white", bd=1, relief=tk.FLAT)
+        self.ai_input.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8), ipady=4)
         self.ai_input.bind("<Return>", self.send_to_gemini_click)
 
-        ai_btn = tk.Button(self.ai_frame, text="Ask", command=self.send_to_gemini_click, bg="#333", fg="#fff", bd=0, padx=10, pady=2)
+        ai_btn = tk.Button(self.ai_frame, text=" Ask ", command=self.send_to_gemini_click, bg="#0e639c", fg="#fff", activebackground="#1177bb", activeforeground="#fff", bd=0, padx=12, pady=3)
         ai_btn.pack(side=tk.RIGHT)
 
+        # --- MAIN CONTENT AREA ---
         self.content_frame = tk.Frame(self.root)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
         
@@ -194,7 +198,7 @@ class MiniSidekick:
         lbl_notes = "Notes (Vim Editor Mode - Press Ctrl-E)" if self.use_vim else "Notes"
         tk.Label(notes_ctrl_frame, text=lbl_notes, bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold")).pack(side=tk.LEFT)
         
-        tk.Button(notes_ctrl_frame, text="Save selected-text as: <filename>", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        tk.Button(notes_ctrl_frame, text="Save Sel As...", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
         
         if self.use_vim:
             tk.Button(notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
@@ -325,8 +329,10 @@ class MiniSidekick:
         self.cal_notes_text.bind("<Control-s>", self.save_selected_as)
         self.cal_notes_text.bind("<Control-S>", self.save_selected_as)
 
-        self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
-        self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
+        # Global AI toggle bindings across all input elements
+        for widget in (self.root, self.text_area, self.todo_text_area, self.cal_notes_text, self.calc_display, self.ai_input):
+            widget.bind("<Control-a>", lambda e: self.toggle_ai_bar())
+            widget.bind("<Control-A>", lambda e: self.toggle_ai_bar())
 
         self.root.bind("<Control-q>", lambda event: self.quit_app())
         self.root.bind("<Control-Q>", lambda event: self.quit_app())
@@ -459,11 +465,15 @@ class MiniSidekick:
         if self.ai_visible:
             self.ai_frame.pack_forget()
             self.ai_visible = False
-            self.root.geometry(f"{w}x{max(400, h - 45)}")
+            self.root.geometry(f"{w}x{max(400, h - 55)}")
         else:
+            # Re-pack content frame after AI frame to keep AI pinned at the bottom
+            self.content_frame.pack_forget()
             self.ai_frame.pack(side=tk.BOTTOM, fill=tk.X)
+            self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+            
             self.ai_visible = True
-            self.root.geometry(f"{w}x{h + 45}")
+            self.root.geometry(f"{w}x{h + 55}")
             self.ai_input.focus_set()
 
         return "break"
@@ -685,7 +695,7 @@ class MiniSidekick:
         screen_height = self.root.winfo_screenheight()
         
         window_width = 640
-        window_height = 545 if self.ai_visible else 500
+        window_height = 555 if self.ai_visible else 500
         
         x = (screen_width // 2) - (window_width // 2)
         y = (screen_height // 2) - (window_height // 2)
