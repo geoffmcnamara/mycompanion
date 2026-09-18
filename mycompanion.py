@@ -23,7 +23,7 @@ Shortcuts:
 Link Formatting:
     https://...                   Blue   -> Open in web browser
     [Label](file:///path/to/file) Green  -> Open in sub-window editor (creates if missing)
-    [[Section Title]]             Purple -> Jump to section header in Notes
+    # [[Section Title]]             Purple -> Jump to section header in Notes (Disabled)
 
 Setup Gemini AI (optional):
     export GEMINI_API_KEY="AIzaSy..."
@@ -40,6 +40,7 @@ import subprocess
 import calendar
 import datetime
 import threading
+import traceback
 from pathlib import Path
 from docopt import docopt
 import re
@@ -48,6 +49,9 @@ import webbrowser
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
 VERSION = "0.3.4"
+
+# Quick logging switch
+LOG_FLAG = False
 
 if sys.platform == "darwin":
     DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
@@ -59,10 +63,8 @@ elif sys.platform == "win32":
 else:
     xdg_data = os.environ.get("XDG_DATA_HOME")
     DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".config" / ROOTNAME)
-    # DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
     xdg_state = os.environ.get("XDG_STATE_HOME")
     STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".config" / ROOTNAME)
-    # STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -73,6 +75,7 @@ CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
 TODO_FILE = DATA_DIR / f"{ROOTNAME}_todo.txt"
 CONFIG_FILE = STATE_DIR / f"{ROOTNAME}.conf"
 LOCK_FILE = STATE_DIR / f"{ROOTNAME}.lock"
+LOG_FILE = DATA_DIR / "daemon.log"
 
 THEMES = {
     "Cyan / Black": {
@@ -133,6 +136,12 @@ DEFAULT_CONFIG = {
     "Theme": {"name": "Dark / White (Default)"}
 }
 
+def setup_logging():
+    """Single point of truth for logging configuration when running as background daemon."""
+    if os.environ.get("SIDEKICK_DAEMON") == "1" and LOG_FLAG:
+        log_fp = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
+        sys.stdout = log_fp
+        sys.stderr = log_fp
 
 class ConfigManager:
     """Manages application configuration via mycompanion.conf (INI format)."""
@@ -143,11 +152,9 @@ class ConfigManager:
 
     def load_config(self):
         if not self.filepath.exists():
-            # Create a brand-new config with default values
             self.config.read_dict(DEFAULT_CONFIG)
             self.save_config()
         else:
-            # Read existing config and patch any missing default keys/sections
             self.config.read(self.filepath, encoding="utf-8")
             for section, keys in DEFAULT_CONFIG.items():
                 if not self.config.has_section(section):
@@ -190,10 +197,10 @@ def print_help_and_paths():
     print(f"  • To-Do File             : {TODO_FILE}")
     print(f"  • Application Config File: {CONFIG_FILE}")
     print(f"  • Lock File              : {LOCK_FILE}")
+    # print(f"  • Daemon Log File        : {LOG_FILE}")
     print("----------------------------------------")
     print("companionway.net © 2026")
     print("----------------------------------------")
-
 
 def ensure_daemon():
     script_path = os.path.abspath(__file__)
@@ -223,6 +230,7 @@ def ensure_daemon():
         new_env["SIDEKICK_DAEMON"] = "1"
 
         args = [python_exec, script_path] + sys.argv[1:]
+        
         subprocess.Popen(
             args,
             env=new_env,
@@ -233,6 +241,7 @@ def ensure_daemon():
         )
         sys.exit(0)
     else:
+        setup_logging()
         with open(LOCK_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
 
@@ -249,6 +258,19 @@ class MiniSidekick:
         self.enable_ai = start_with_ai or self.cfg.get_bool("Settings", "ai_mode", False)
 
         self.root = tk.Tk()
+        
+        def handle_exception(exc_type, exc_value, exc_traceback):
+            if issubclass(exc_type, KeyboardInterrupt):
+                sys.__excepthook__(exc_type, exc_value, exc_traceback)
+                return
+            error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+            print("--- UNCAUGHT EXCEPTION ---", file=sys.stderr)
+            print(error_msg, file=sys.stderr)
+            sys.stderr.flush()
+
+        self.root.report_callback_exception = handle_exception
+        sys.excepthook = handle_exception
+
         self.root.title(os.path.basename(__file__))
 
         saved_geometry = self.cfg.get_string("Window", "geometry", "640x500")
@@ -597,17 +619,17 @@ class MiniSidekick:
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
-        for idx, match in enumerate(re.finditer(r"\[\[(.*?)\]\]", content)):
-            tag_name = f"wiki_{idx}"
-            start = f"1.0 + {match.start()} chars"
-            end = f"1.0 + {match.end()} chars"
-            target_title = match.group(1)
+        # for idx, match in enumerate(re.finditer(r"\[\[(.*?)\]\]", content)):
+        #     tag_name = f"wiki_{idx}"
+        #     start = f"1.0 + {match.start()} chars"
+        #     end = f"1.0 + {match.end()} chars"
+        #     target_title = match.group(1)
 
-            text_widget.tag_config(tag_name, foreground="#8B5CF6", underline=True)
-            text_widget.tag_add(tag_name, start, end)
-            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, t=target_title: self.jump_to_wiki_note(t))
-            text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
-            text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
+        #     text_widget.tag_config(tag_name, foreground="#8B5CF6", underline=True)
+        #     text_widget.tag_add(tag_name, start, end)
+        #     text_widget.tag_bind(tag_name, "<Button-1>", lambda e, t=target_title: self.jump_to_wiki_note(t))
+        #     text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
+        #     text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
     def open_or_create_file(self, file_path):
         path = Path(file_path)
@@ -705,17 +727,40 @@ class MiniSidekick:
         save_btn = tk.Button(ctrl_frame, text="Save (Ctrl-S)", command=save_file, bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=10, pady=3)
         save_btn.pack(side=tk.RIGHT, padx=5)
 
-    def jump_to_wiki_note(self, note_title):
-        self.switch_view("notes")
-        idx = self.text_area.search(note_title, "1.0", stopindex=tk.END)
+    # def jump_to_wiki_note(self, note_title):
+    #     self.switch_view("notes")
 
-        if idx:
-            self.text_area.see(idx)
-            self.text_area.mark_set(tk.INSERT, idx)
-        else:
-            self.text_area.insert(tk.END, f"\n\n=== {note_title} ===\n")
-            self.text_area.see(tk.END)
-            self.apply_link_parsing(self.text_area)
+    #     was_disabled = str(self.text_area.cget("state")) == tk.DISABLED
+    #     if was_disabled:
+    #         self.text_area.config(state=tk.NORMAL)
+
+    #     content = self.text_area.get("1.0", tk.END)
+
+    #     escaped_title = re.escape(note_title)
+    #     raw_pattern = f"^[ \\t\\xa0]*([#=]+|\\{{\\{{\\{{|\\[\\[)?\\s*{escaped_title}"
+    #     flags = re.IGNORECASE | re.MULTILINE
+
+    #     pattern = re.compile(raw_pattern, flags)
+    #     match = pattern.search(content)
+
+    #     if match:
+    #         line_num = content[: match.start()].count("\n") + 1
+    #         target_index = f"{line_num}.0"
+
+    #         self.text_area.mark_set(tk.INSERT, target_index)
+    #         self.text_area.see(target_index)
+    #     else:
+    #         new_section = f"\n\n=== {note_title} ===\n"
+    #         self.text_area.insert(tk.END, new_section)
+    #         self.text_area.mark_set(tk.INSERT, tk.END)
+    #         self.text_area.see(tk.END)
+    #         if hasattr(self, "apply_link_parsing"):
+    #             self.apply_link_parsing(self.text_area)
+
+    #     if was_disabled:
+    #         self.text_area.config(state=tk.DISABLED)
+
+    #     self.text_area.focus_set()
 
     def save_selected_as(self, event=None):
         widget = None
