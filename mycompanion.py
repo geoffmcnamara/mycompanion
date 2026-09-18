@@ -19,7 +19,6 @@ Shortcuts:
     Ctrl-t      Open Theme Selector
     Ctrl-s      Save selected text as file
     Ctrl-q      Quit application
-    Ctrl-t      Theme selection
 
 Link Formatting:
     https://...                   Blue   -> Open in web browser
@@ -33,6 +32,7 @@ Setup Gemini AI (optional):
 import os
 import sys
 import json
+import configparser
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from pynput import keyboard
@@ -45,10 +45,9 @@ from docopt import docopt
 import re
 import webbrowser
 
-
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.3.3"
+VERSION = "0.3.4"
 
 if sys.platform == "darwin":
     DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
@@ -59,9 +58,11 @@ elif sys.platform == "win32":
     STATE_DIR = DATA_DIR
 else:
     xdg_data = os.environ.get("XDG_DATA_HOME")
-    DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
+    DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".config" / ROOTNAME)
+    # DATA_DIR = (Path(xdg_data) / ROOTNAME) if xdg_data and Path(xdg_data).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
     xdg_state = os.environ.get("XDG_STATE_HOME")
-    STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".local" / "state" / ROOTNAME)
+    STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".config" / ROOTNAME)
+    # STATE_DIR = (Path(xdg_state) / ROOTNAME) if xdg_state and Path(xdg_state).is_absolute() else (Path.home() / ".local" / "share" / ROOTNAME)
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STATE_DIR.mkdir(parents=True, exist_ok=True)
@@ -70,111 +71,113 @@ NOTES_FILE = DATA_DIR / f"{ROOTNAME}_notes.txt"
 CAL_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_cal_notes.txt"
 CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
 TODO_FILE = DATA_DIR / f"{ROOTNAME}_todo.txt"
-THEME_FILE = STATE_DIR / f"{ROOTNAME}_theme.json"
+CONFIG_FILE = STATE_DIR / f"{ROOTNAME}.conf"
 LOCK_FILE = STATE_DIR / f"{ROOTNAME}.lock"
 
 THEMES = {
     "Cyan / Black": {
-        "bg": "#00ffff",
-        "fg": "#000000",
-        "header_bg": "#00cccc",
-        "nav_bg": "#00e6e6",
-        "panel_bg": "#00e6e6",
-        "btn_bg": "#00b3b3",
-        "btn_fg": "#000000",
-        "insert_bg": "#000000"
+        "bg": "#00ffff", "fg": "#000000", "header_bg": "#00cccc",
+        "nav_bg": "#00e6e6", "panel_bg": "#00e6e6", "btn_bg": "#00b3b3",
+        "btn_fg": "#000000", "insert_bg": "#000000"
     },
     "Dark / White (Default)": {
-        "bg": "#1e1e1e",
-        "fg": "#d4d4d4",
-        "header_bg": "#1a1a1a",
-        "nav_bg": "#2d2d2d",
-        "panel_bg": "#2d2d2d",
-        "btn_bg": "#333333",
-        "btn_fg": "#ffffff",
-        "insert_bg": "#ffffff"
+        "bg": "#1e1e1e", "fg": "#d4d4d4", "header_bg": "#1a1a1a",
+        "nav_bg": "#2d2d2d", "panel_bg": "#2d2d2d", "btn_bg": "#333333",
+        "btn_fg": "#ffffff", "insert_bg": "#ffffff"
     },
     "Classic Matrix": {
-        "bg": "#000000",
-        "fg": "#00ff00",
-        "header_bg": "#051505",
-        "nav_bg": "#0a220a",
-        "panel_bg": "#0a220a",
-        "btn_bg": "#143d14",
-        "btn_fg": "#00ff00",
-        "insert_bg": "#00ff00"
+        "bg": "#000000", "fg": "#00ff00", "header_bg": "#051505",
+        "nav_bg": "#0a220a", "panel_bg": "#0a220a", "btn_bg": "#143d14",
+        "btn_fg": "#00ff00", "insert_bg": "#00ff00"
     },
     "Solarized Light": {
-        "bg": "#fdf6e3",
-        "fg": "#657b83",
-        "header_bg": "#eee8d5",
-        "nav_bg": "#e0d8c3",
-        "panel_bg": "#eee8d5",
-        "btn_bg": "#d3c7a1",
-        "btn_fg": "#073642",
-        "insert_bg": "#073642"
+        "bg": "#fdf6e3", "fg": "#657b83", "header_bg": "#eee8d5",
+        "nav_bg": "#e0d8c3", "panel_bg": "#eee8d5", "btn_bg": "#d3c7a1",
+        "btn_fg": "#073642", "insert_bg": "#073642"
     },
     "Nord Dark": {
-        "bg": "#2e3440",
-        "fg": "#eceff4",
-        "header_bg": "#242933",
-        "nav_bg": "#3b4252",
-        "panel_bg": "#3b4252",
-        "btn_bg": "#4c566a",
-        "btn_fg": "#88c0d0",
-        "insert_bg": "#88c0d0"
+        "bg": "#2e3440", "fg": "#eceff4", "header_bg": "#242933",
+        "nav_bg": "#3b4252", "panel_bg": "#3b4252", "btn_bg": "#4c566a",
+        "btn_fg": "#88c0d0", "insert_bg": "#88c0d0"
     },
     "Gruvbox Dark": {
-        "bg": "#282828",
-        "fg": "#ebdbb2",
-        "header_bg": "#1d2021",
-        "nav_bg": "#3c3836",
-        "panel_bg": "#3c3836",
-        "btn_bg": "#504945",
-        "btn_fg": "#fabd2f",
-        "insert_bg": "#fe8019"
+        "bg": "#282828", "fg": "#ebdbb2", "header_bg": "#1d2021",
+        "nav_bg": "#3c3836", "panel_bg": "#3c3836", "btn_bg": "#504945",
+        "btn_fg": "#fabd2f", "insert_bg": "#fe8019"
     },
     "Dracula": {
-        "bg": "#282a36",
-        "fg": "#f8f8f2",
-        "header_bg": "#21222c",
-        "nav_bg": "#44475a",
-        "panel_bg": "#44475a",
-        "btn_bg": "#6272a4",
-        "btn_fg": "#ff79c6",
-        "insert_bg": "#50fa7b"
+        "bg": "#282a36", "fg": "#f8f8f2", "header_bg": "#21222c",
+        "nav_bg": "#44475a", "panel_bg": "#44475a", "btn_bg": "#6272a4",
+        "btn_fg": "#ff79c6", "insert_bg": "#50fa7b"
     },
     "Monokai": {
-        "bg": "#272822",
-        "fg": "#f8f8f2",
-        "header_bg": "#1e1f1c",
-        "nav_bg": "#3e3d32",
-        "panel_bg": "#3e3d32",
-        "btn_bg": "#75715e",
-        "btn_fg": "#a6e22e",
-        "insert_bg": "#f92672"
+        "bg": "#272822", "fg": "#f8f8f2", "header_bg": "#1e1f1c",
+        "nav_bg": "#3e3d32", "panel_bg": "#3e3d32", "btn_bg": "#75715e",
+        "btn_fg": "#a6e22e", "insert_bg": "#f92672"
     },
     "Oceanic Next": {
-        "bg": "#1b2b34",
-        "fg": "#d8dee9",
-        "header_bg": "#16222a",
-        "nav_bg": "#343d46",
-        "panel_bg": "#343d46",
-        "btn_bg": "#4f5b66",
-        "btn_fg": "#6699cc",
-        "insert_bg": "#ec5f67"
+        "bg": "#1b2b34", "fg": "#d8dee9", "header_bg": "#16222a",
+        "nav_bg": "#343d46", "panel_bg": "#343d46", "btn_bg": "#4f5b66",
+        "btn_fg": "#6699cc", "insert_bg": "#ec5f67"
     },
     "Amber Phosphor": {
-        "bg": "#120a00",
-        "fg": "#ffb000",
-        "header_bg": "#0a0500",
-        "nav_bg": "#1f1200",
-        "panel_bg": "#1f1200",
-        "btn_bg": "#3d2400",
-        "btn_fg": "#ffc107",
-        "insert_bg": "#ffb000"
+        "bg": "#120a00", "fg": "#ffb000", "header_bg": "#0a0500",
+        "nav_bg": "#1f1200", "panel_bg": "#1f1200", "btn_bg": "#3d2400",
+        "btn_fg": "#ffc107", "insert_bg": "#ffb000"
     }
 }
+
+DEFAULT_CONFIG = {
+    "Window": {"geometry": "640x500"},
+    "Settings": {"ai_mode": "false", "vim_mode": "false"},
+    "Theme": {"name": "Dark / White (Default)"}
+}
+
+
+class ConfigManager:
+    """Manages application configuration via mycompanion.conf (INI format)."""
+    def __init__(self, filepath=CONFIG_FILE):
+        self.filepath = Path(filepath)
+        self.config = configparser.ConfigParser()
+        self.load_config()
+
+    def load_config(self):
+        if not self.filepath.exists():
+            # Create a brand-new config with default values
+            self.config.read_dict(DEFAULT_CONFIG)
+            self.save_config()
+        else:
+            # Read existing config and patch any missing default keys/sections
+            self.config.read(self.filepath, encoding="utf-8")
+            for section, keys in DEFAULT_CONFIG.items():
+                if not self.config.has_section(section):
+                    self.config.add_section(section)
+                for key, val in keys.items():
+                    if not self.config.has_option(section, key):
+                        self.config.set(section, key, val)
+
+    def save_config(self):
+        try:
+            with open(self.filepath, "w", encoding="utf-8") as f:
+                self.config.write(f)
+        except Exception as e:
+            print(f"Failed to save config: {e}")
+
+    def get_bool(self, section, key, default=False):
+        try:
+            return self.config.getboolean(section, key)
+        except Exception:
+            return default
+
+    def get_string(self, section, key, default=""):
+        return self.config.get(section, key, fallback=default)
+
+    def set_value(self, section, key, value):
+        if not self.config.has_section(section):
+            self.config.add_section(section)
+        self.config.set(section, key, str(value))
+        self.save_config()
+
 
 def print_help_and_paths():
     print(__doc__)
@@ -185,7 +188,7 @@ def print_help_and_paths():
     print(f"  • Calendar Notes File    : {CAL_NOTES_FILE}")
     print(f"  • Calculator History File: {CALC_NOTES_FILE}")
     print(f"  • To-Do File             : {TODO_FILE}")
-    print(f"  • Theme Config File      : {THEME_FILE}")
+    print(f"  • Application Config File: {CONFIG_FILE}")
     print(f"  • Lock File              : {LOCK_FILE}")
     print("----------------------------------------")
     print("companionway.net © 2026")
@@ -198,15 +201,18 @@ def ensure_daemon():
 
     if os.path.exists(LOCK_FILE):
         try:
-            with open(LOCK_FILE, "r") as f:
+            with open(LOCK_FILE, "r", encoding="utf-8") as f:
                 old_pid = int(f.read().strip())
             os.kill(old_pid, 0)
             print(f"MyCompanion is already running (PID {old_pid}).")
-            print(f"Use Ctrl-space to toggle the window.")
+            print("Use Ctrl-space to toggle the window.")
             print(f"Lock file location: {LOCK_FILE}")
             sys.exit(0)
         except (ProcessLookupError, ValueError):
-            os.remove(LOCK_FILE)
+            try:
+                os.remove(LOCK_FILE)
+            except OSError:
+                pass
         except PermissionError:
             sys.exit(0)
 
@@ -215,7 +221,7 @@ def ensure_daemon():
 
         new_env = os.environ.copy()
         new_env["SIDEKICK_DAEMON"] = "1"
-        
+
         args = [python_exec, script_path] + sys.argv[1:]
         subprocess.Popen(
             args,
@@ -227,28 +233,32 @@ def ensure_daemon():
         )
         sys.exit(0)
     else:
-        with open(LOCK_FILE, "w") as f:
+        with open(LOCK_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
 
 
 class MiniSidekick:
     def __init__(self, start_with_ai=False, use_vim=False):
+        self.cfg = ConfigManager()
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
         self.calc_history_file = CALC_NOTES_FILE
         self.todo_file = TODO_FILE
-        self.use_vim = use_vim
-        self.enable_ai = start_with_ai
-        
+
+        self.use_vim = use_vim or self.cfg.get_bool("Settings", "vim_mode", False)
+        self.enable_ai = start_with_ai or self.cfg.get_bool("Settings", "ai_mode", False)
+
         self.root = tk.Tk()
         self.root.title(os.path.basename(__file__))
-        self.root.geometry("640x500") 
+
+        saved_geometry = self.cfg.get_string("Window", "geometry", "640x500")
+        self.root.geometry(saved_geometry)
         self.root.attributes("-topmost", True)
         self.root.withdraw()
-        
+
         self.last_checked_date = datetime.datetime.now().date()
         self.sub_windows = []
-        
+
         # --- TOP HEADER ---
         self.header_frame = tk.Frame(self.root, bg="#1a1a1a", pady=5, padx=10)
         self.header_frame.pack(side=tk.TOP, fill=tk.X)
@@ -268,7 +278,7 @@ class MiniSidekick:
         # --- NAVIGATION BAR ---
         self.nav_frame = tk.Frame(self.root, bg="#2d2d2d")
         self.nav_frame.pack(side=tk.TOP, fill=tk.X)
-        
+
         tk.Button(self.nav_frame, text="1. Notes", command=lambda: self.switch_view("notes"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="2. Calc", command=lambda: self.switch_view("calc"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
         tk.Button(self.nav_frame, text="3. Calendar", command=lambda: self.switch_view("cal"), bg="#333", fg="#fff", bd=0, padx=10, pady=5).pack(side=tk.LEFT, expand=True, fill=tk.X)
@@ -290,26 +300,26 @@ class MiniSidekick:
         # --- MAIN CONTENT AREA ---
         self.content_frame = tk.Frame(self.root)
         self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-        
+
         # --- VIEW 1: NOTES ---
         self.notes_frame = tk.Frame(self.content_frame)
         self.notes_ctrl_frame = tk.Frame(self.notes_frame, bg="#2d2d2d", pady=4, padx=10)
         self.notes_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
-        
+
         lbl_notes = "Notes (Vim Editor Mode - Press Ctrl-E)" if self.use_vim else "Notes"
         self.notes_lbl_widget = tk.Label(self.notes_ctrl_frame, text=lbl_notes, bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold"))
         self.notes_lbl_widget.pack(side=tk.LEFT)
-        
+
         tk.Button(self.notes_ctrl_frame, text="Save Selected As", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         if self.enable_ai:
-            tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bg="#333", fg="#4ec9b0", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0)) 
+            tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bg="#333", fg="#4ec9b0", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         if self.use_vim:
             tk.Button(self.notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.text_area = tk.Text(
-            self.notes_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
+            self.notes_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4",
             insertbackground="white", font=("Monospace", 11), bd=0, padx=10, pady=10
         )
         self.text_area.pack(fill=tk.BOTH, expand=True)
@@ -323,7 +333,7 @@ class MiniSidekick:
 
         # --- VIEW 2: CALCULATOR ---
         self.calc_frame = tk.Frame(self.content_frame, bg="#1e1e1e")
-        
+
         self.calc_input_container = tk.Frame(self.calc_frame, bg="#1e1e1e")
         self.calc_input_container.pack(fill=tk.X, padx=15, pady=15)
 
@@ -349,7 +359,7 @@ class MiniSidekick:
             tk.Button(self.calc_history_header, text="Edit in Vim", command=lambda: self.open_in_vim(self.calc_history_file, self.calc_history_text), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.calc_history_text = tk.Text(
-            self.calc_frame, wrap=tk.WORD, bg="#2d2d2d", fg="#d4d4d4", 
+            self.calc_frame, wrap=tk.WORD, bg="#2d2d2d", fg="#d4d4d4",
             insertbackground="white", font=("Monospace", 10), bd=0, padx=10, pady=10
         )
         self.calc_history_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 15))
@@ -363,9 +373,9 @@ class MiniSidekick:
 
         # --- VIEW 3: CALENDAR ---
         self.cal_frame = tk.Frame(self.content_frame, bg="#1e1e1e")
-        
+
         self.cal_text = tk.Text(
-            self.cal_frame, wrap=tk.NONE, bg="#1e1e1e", fg="#d4d4d4", 
+            self.cal_frame, wrap=tk.NONE, bg="#1e1e1e", fg="#d4d4d4",
             font=("Monospace", 10), bd=0, padx=15, pady=10, height=9
         )
         self.cal_text.pack(side=tk.TOP, fill=tk.X, expand=False)
@@ -383,7 +393,7 @@ class MiniSidekick:
             tk.Button(self.cal_notes_header_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.cal_notes_file, self.cal_notes_text), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.cal_notes_text = tk.Text(
-            self.cal_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
+            self.cal_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4",
             insertbackground="white", font=("Monospace", 10), bd=0, padx=10, pady=5
         )
         self.cal_notes_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=15, pady=10)
@@ -399,18 +409,18 @@ class MiniSidekick:
         self.todo_frame = tk.Frame(self.content_frame)
         self.todo_ctrl_frame = tk.Frame(self.todo_frame, bg="#2d2d2d", pady=4, padx=10)
         self.todo_ctrl_frame.pack(side=tk.TOP, fill=tk.X)
-        
+
         lbl_todo = "To-Do (Vim Editor Mode - Press Ctrl-E)" if self.use_vim else "To-Do"
         self.todo_lbl_widget = tk.Label(self.todo_ctrl_frame, text=lbl_todo, bg="#2d2d2d", fg="#9cdcfe", font=("Monospace", 9, "bold"))
         self.todo_lbl_widget.pack(side=tk.LEFT)
-        
+
         tk.Button(self.todo_ctrl_frame, text="Save Select As...", command=self.save_selected_as, bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         if self.use_vim:
             tk.Button(self.todo_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.todo_file, self.todo_text_area), bg="#333", fg="#fff", bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.todo_text_area = tk.Text(
-            self.todo_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4", 
+            self.todo_frame, wrap=tk.WORD, bg="#1e1e1e", fg="#d4d4d4",
             insertbackground="white", font=("Monospace", 11), bd=0, padx=10, pady=10
         )
         self.todo_text_area.pack(fill=tk.BOTH, expand=True)
@@ -423,7 +433,7 @@ class MiniSidekick:
             self.todo_text_area.bind("<Control-E>", lambda e: self.open_in_vim(self.todo_file, self.todo_text_area))
 
         self.ai_visible = False
-        if start_with_ai:
+        if self.enable_ai:
             self.toggle_ai_bar(force_state=True)
 
         self.current_view = None
@@ -431,7 +441,7 @@ class MiniSidekick:
         self.update_header_clock()
 
         self.root.protocol("WM_DELETE_WINDOW", self.hide_window)
-        
+
         for ctrl_seq in ("<Control-1>", "<Control-Key-1>"):
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("notes"))
         for ctrl_seq in ("<Control-2>", "<Control-Key-2>"):
@@ -441,65 +451,35 @@ class MiniSidekick:
         for ctrl_seq in ("<Control-4>", "<Control-Key-4>"):
             self.root.bind(ctrl_seq, lambda e: self.handle_tab_shortcut("todo"))
 
-        # Save Selected As Hotkeys
         self.root.bind("<Control-s>", self.save_selected_as)
         self.root.bind("<Control-S>", self.save_selected_as)
-        self.text_area.bind("<Control-s>", self.save_selected_as)
-        self.text_area.bind("<Control-S>", self.save_selected_as)
-        self.todo_text_area.bind("<Control-s>", self.save_selected_as)
-        self.todo_text_area.bind("<Control-S>", self.save_selected_as)
-        self.cal_notes_text.bind("<Control-s>", self.save_selected_as)
-        self.cal_notes_text.bind("<Control-S>", self.save_selected_as)
-        self.calc_history_text.bind("<Control-s>", self.save_selected_as)
-        self.calc_history_text.bind("<Control-S>", self.save_selected_as)
 
-        # Global AI & Theme toggle bindings across all input elements
-        for widget in (self.root, self.text_area, self.todo_text_area, self.cal_notes_text, self.calc_history_text, self.calc_display, self.ai_input):
-            widget.bind("<Control-a>", lambda e: self.toggle_ai_bar())
-            widget.bind("<Control-A>", lambda e: self.toggle_ai_bar())
-            widget.bind("<Control-t>", lambda e: self.open_theme_selector())
-            widget.bind("<Control-T>", lambda e: self.open_theme_selector())
-
+        self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
+        self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
+        self.root.bind("<Control-t>", lambda e: self.open_theme_selector())
+        self.root.bind("<Control-T>", lambda e: self.open_theme_selector())
         self.root.bind("<Control-q>", lambda event: self.quit_app())
         self.root.bind("<Control-Q>", lambda event: self.quit_app())
-        
-        self.text_area.bind("<Control-q>", lambda event: self.quit_app())
-        self.calc_display.bind("<Control-q>", lambda event: self.quit_app())
-        self.todo_text_area.bind("<Control-q>", lambda event: self.quit_app())
-        
+
         self.is_visible = False
         self.hotkey_listener = None
 
-        # Load and apply initial saved theme
         self.current_theme_name = self.load_saved_theme()
         self.apply_theme(self.current_theme_name)
 
     # --- THEME MANAGEMENT ENGINE ---
     def load_saved_theme(self):
-        if THEME_FILE.exists():
-            try:
-                with open(THEME_FILE, "r") as f:
-                    data = json.load(f)
-                    theme_name = data.get("theme", "Dark / White (Default)")
-                    if theme_name in THEMES:
-                        return theme_name
-            except Exception:
-                pass
-        return "Dark / White (Default)"
+        theme_name = self.cfg.get_string("Theme", "name", "Dark / White (Default)")
+        return theme_name if theme_name in THEMES else "Dark / White (Default)"
 
     def save_theme(self, theme_name):
-        try:
-            with open(THEME_FILE, "w") as f:
-                json.dump({"theme": theme_name}, f)
-        except Exception as e:
-            print(f"Failed to save theme state: {e}")
+        self.cfg.set_value("Theme", "name", theme_name)
 
     def apply_theme(self, theme_name):
         self.current_theme_name = theme_name
         colors = THEMES[theme_name]
         self.save_theme(theme_name)
 
-        # Core frame styling
         self.header_frame.config(bg=colors["header_bg"])
         self.nav_frame.config(bg=colors["nav_bg"])
         self.ai_frame.config(bg=colors["panel_bg"])
@@ -511,7 +491,6 @@ class MiniSidekick:
         self.cal_notes_header_frame.config(bg=colors["bg"])
         self.todo_ctrl_frame.config(bg=colors["panel_bg"])
 
-        # Label styling
         self.date_label.config(bg=colors["header_bg"])
         self.title_label.config(bg=colors["header_bg"], fg=colors["fg"])
         self.version_label.config(bg=colors["header_bg"])
@@ -522,19 +501,17 @@ class MiniSidekick:
         self.calc_history_lbl.config(bg=colors["bg"], fg=colors["fg"])
         self.cal_notes_label.config(bg=colors["bg"], fg=colors["fg"])
 
-        # Editors & Displays
         for txt in (self.text_area, self.todo_text_area, self.cal_notes_text, self.cal_text, self.calc_history_text):
             txt.config(bg=colors["bg"], fg=colors["fg"], insertbackground=colors["insert_bg"])
 
         self.calc_display.config(bg=colors["panel_bg"], fg=colors["fg"], insertbackground=colors["insert_bg"])
         self.ai_input.config(bg=colors["panel_bg"], fg=colors["fg"], insertbackground=colors["insert_bg"])
 
-        # Update buttons
         def style_children(parent):
             for child in parent.winfo_children():
                 if isinstance(child, tk.Button):
                     child.config(
-                        bg=colors["btn_bg"], 
+                        bg=colors["btn_bg"],
                         fg=colors["btn_fg"],
                         activebackground=colors["panel_bg"],
                         activeforeground=colors["fg"]
@@ -553,7 +530,7 @@ class MiniSidekick:
         win.title("Select Theme")
         win.geometry("320x250")
         win.attributes("-topmost", True)
-        
+
         colors = THEMES[self.current_theme_name]
         win.config(bg=colors["bg"])
 
@@ -561,7 +538,7 @@ class MiniSidekick:
         lbl.pack(pady=(10, 5))
 
         listbox = tk.Listbox(
-            win, bg=colors["panel_bg"], fg=colors["fg"], 
+            win, bg=colors["panel_bg"], fg=colors["fg"],
             selectbackground=colors["btn_bg"], font=("Monospace", 10), bd=0, relief=tk.FLAT
         )
         listbox.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
@@ -596,7 +573,6 @@ class MiniSidekick:
 
         content = text_widget.get("1.0", tk.END)
 
-        # 1. External Web URLs
         for idx, match in enumerate(re.finditer(r"https?://[^\s>\"']+", content)):
             tag_name = f"ext_{idx}"
             start = f"1.0 + {match.start()} chars"
@@ -609,7 +585,6 @@ class MiniSidekick:
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
-        # 2. Local File Links [Label](file:///path/to/file)
         for idx, match in enumerate(re.finditer(r"\[(.*?)\]\((file://.*?)\)", content)):
             tag_name = f"file_{idx}"
             start = f"1.0 + {match.start()} chars"
@@ -618,15 +593,10 @@ class MiniSidekick:
 
             text_widget.tag_config(tag_name, foreground="#10B981", underline=True)
             text_widget.tag_add(tag_name, start, end)
-            text_widget.tag_bind(
-                tag_name,
-                "<Button-1>",
-                lambda e, p=file_path: self.open_file_subwindow(p)
-            )
+            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, p=file_path: self.open_file_subwindow(p))
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
-        # 3. Wiki Links [[Target Note]]
         for idx, match in enumerate(re.finditer(r"\[\[(.*?)\]\]", content)):
             tag_name = f"wiki_{idx}"
             start = f"1.0 + {match.start()} chars"
@@ -635,11 +605,7 @@ class MiniSidekick:
 
             text_widget.tag_config(tag_name, foreground="#8B5CF6", underline=True)
             text_widget.tag_add(tag_name, start, end)
-            text_widget.tag_bind(
-                tag_name,
-                "<Button-1>",
-                lambda e, t=target_title: self.jump_to_wiki_note(t)
-            )
+            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, t=target_title: self.jump_to_wiki_note(t))
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
@@ -668,7 +634,7 @@ class MiniSidekick:
         win.title(path.name)
         win.geometry("600x450")
         win.attributes("-topmost", True)
-        
+
         colors = THEMES[self.current_theme_name]
         win.configure(bg=colors["bg"])
         self.sub_windows.append(win)
@@ -677,18 +643,11 @@ class MiniSidekick:
         top_bar = tk.Frame(win, bg=colors["panel_bg"], pady=4, padx=10)
         top_bar.pack(side=tk.TOP, fill=tk.X)
 
-        path_label = tk.Label(
-            top_bar, text=str(path), bg=colors["panel_bg"], fg=colors["fg"],
-            font=("Monospace", 9, "bold"), anchor="w"
-        )
+        path_label = tk.Label(top_bar, text=str(path), bg=colors["panel_bg"], fg=colors["fg"], font=("Monospace", 9, "bold"), anchor="w")
         path_label.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
         def delete_file():
-            confirm = messagebox.askyesno(
-                "Confirm Delete",
-                f"Are you sure you want to delete {path.name}?",
-                parent=win
-            )
+            confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {path.name}?", parent=win)
             if confirm:
                 try:
                     if path.exists():
@@ -748,9 +707,8 @@ class MiniSidekick:
 
     def jump_to_wiki_note(self, note_title):
         self.switch_view("notes")
-        content = self.text_area.get("1.0", tk.END)
         idx = self.text_area.search(note_title, "1.0", stopindex=tk.END)
-        
+
         if idx:
             self.text_area.see(idx)
             self.text_area.mark_set(tk.INSERT, idx)
@@ -802,7 +760,7 @@ class MiniSidekick:
     def open_in_vim(self, file_path, text_widget):
         text_widget.config(state=tk.NORMAL)
         content = text_widget.get("1.0", tk.END).strip()
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             f.write(content)
 
         self.root.attributes("-topmost", False)
@@ -861,7 +819,7 @@ class MiniSidekick:
         text_widget.config(state=tk.NORMAL)
         text_widget.delete("1.0", tk.END)
         if os.path.exists(file_path):
-            with open(file_path, "r") as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 text_widget.insert("1.0", f.read())
         self.apply_link_parsing(text_widget)
 
@@ -874,20 +832,22 @@ class MiniSidekick:
 
     def toggle_ai_bar(self, force_state=None):
         if force_state is not None:
-            self.ai_visible = not force_state 
-            
+            target_state = force_state
+        else:
+            target_state = not self.ai_visible
+
         current_geometry = self.root.geometry().split("+")[0]
         w, h = map(int, current_geometry.split("x"))
 
-        if self.ai_visible:
+        if not target_state and self.ai_visible:
             self.ai_frame.pack_forget()
             self.ai_visible = False
             self.root.geometry(f"{w}x{max(400, h - 55)}")
-        else:
+        elif target_state and not self.ai_visible:
             self.content_frame.pack_forget()
             self.ai_frame.pack(side=tk.BOTTOM, fill=tk.X)
             self.content_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-            
+
             self.ai_visible = True
             self.root.geometry(f"{w}x{h + 55}")
             self.ai_input.focus_set()
@@ -912,7 +872,7 @@ class MiniSidekick:
             answer = response.text
         except Exception as e:
             answer = f"Error calling Gemini API:\n{str(e)}"
-        
+
         self.root.after(0, lambda: self.open_response_window(query, answer))
 
     def open_response_window(self, query, answer):
@@ -920,7 +880,7 @@ class MiniSidekick:
         win.title(f"Gemini: {query[:35]}...")
         win.geometry("550x450")
         win.attributes("-topmost", True)
-        
+
         colors = THEMES[self.current_theme_name]
         win.configure(bg=colors["bg"])
         self.sub_windows.append(win)
@@ -966,25 +926,25 @@ class MiniSidekick:
     def update_header_clock(self):
         now = datetime.datetime.now()
         current_date = now.date()
-        
+
         if self.last_checked_date != current_date:
             self.last_checked_date = current_date
             self.load_calendar()
-        
+
         date_str = now.strftime("%Y-%m-%d (%b %d, %a)")
         time_str = now.strftime("%I:%M %p").lower().lstrip("0")
-  
+
         self.date_label.config(text=date_str)
         self.time_label.config(text=time_str)
-  
-        self.root.after(60000, self.update_header_clock) 
+
+        self.root.after(60000, self.update_header_clock)
 
     def switch_view(self, view_name):
         self.notes_frame.pack_forget()
         self.calc_frame.pack_forget()
         self.cal_frame.pack_forget()
         self.todo_frame.pack_forget()
-        
+
         if view_name == "notes":
             self.notes_frame.pack(fill=tk.BOTH, expand=True)
             self.text_area.focus_set()
@@ -1009,18 +969,18 @@ class MiniSidekick:
             result = eval(expr, {"__builtins__": None}, {})
             result_str = f"= {result}"
             self.calc_result.config(text=result_str, fg="#4ec9b0")
-            
+
             history_entry = f"{expr}  -->  {result}\n"
             was_disabled = str(self.calc_history_text.cget("state")) == tk.DISABLED
             if was_disabled:
                 self.calc_history_text.config(state=tk.NORMAL)
-            
+
             self.calc_history_text.insert("1.0", history_entry)
             self.apply_link_parsing(self.calc_history_text)
-            
+
             if was_disabled:
                 self.calc_history_text.config(state=tk.DISABLED)
-            
+
             self.calc_display.delete(0, tk.END)
         except Exception:
             self.calc_result.config(text="Invalid expression", fg="#f44747")
@@ -1028,61 +988,59 @@ class MiniSidekick:
     def load_calendar(self):
         now = datetime.datetime.now()
         next_month_date = now.replace(day=28) + datetime.timedelta(days=4)
-        
+
         cal = calendar.TextCalendar(calendar.SUNDAY)
         current_lines = cal.formatmonth(now.year, now.month).splitlines()
         next_lines = cal.formatmonth(next_month_date.year, next_month_date.month).splitlines()
-        
+
         max_lines = max(len(current_lines), len(next_lines))
         current_lines += [""] * (max_lines - len(current_lines))
         next_lines += [""] * (max_lines - len(next_lines))
-        
+
         combined_lines = []
         for cur_l, nxt_l in zip(current_lines, next_lines):
             combined_lines.append(f"{cur_l:<30}    {nxt_l}")
-            
+
         final_cal_str = "\n".join(combined_lines)
-        
+
         self.cal_text.config(state=tk.NORMAL)
         self.cal_text.delete("1.0", tk.END)
         self.cal_text.insert("1.0", final_cal_str)
-        
+
         self.cal_text.tag_config("today", foreground="#ffe600", background="#333333", font=("Monospace", 10, "bold"))
-        
+
         today_str = str(now.day)
         for line_num, line_text in enumerate(current_lines, start=1):
-            if today_str in line_text.split():
-                line_content = self.cal_text.get(f"{line_num}.0", f"{line_num}.end")
-                col_idx = line_content.find(today_str)
-                if col_idx != -1:
-                    start_pos = f"{line_num}.{col_idx}"
-                    end_pos = f"{line_num}.{col_idx + len(today_str)}"
-                    self.cal_text.tag_add("today", start_pos, end_pos)
+            match = re.search(r'\b' + re.escape(today_str) + r'\b', line_text)
+            if match:
+                start_pos = f"{line_num}.{match.start()}"
+                end_pos = f"{line_num}.{match.end()}"
+                self.cal_text.tag_add("today", start_pos, end_pos)
                 break
 
         self.cal_text.config(state=tk.DISABLED)
 
     def load_notes(self):
         if os.path.exists(self.note_file):
-            with open(self.note_file, "r") as f:
+            with open(self.note_file, "r", encoding="utf-8") as f:
                 self.text_area.insert("1.0", f.read())
         self.apply_link_parsing(self.text_area)
 
     def load_cal_notes(self):
         if os.path.exists(self.cal_notes_file):
-            with open(self.cal_notes_file, "r") as f:
+            with open(self.cal_notes_file, "r", encoding="utf-8") as f:
                 self.cal_notes_text.insert("1.0", f.read())
         self.apply_link_parsing(self.cal_notes_text)
 
     def load_calc_history(self):
         if os.path.exists(self.calc_history_file):
-            with open(self.calc_history_file, "r") as f:
+            with open(self.calc_history_file, "r", encoding="utf-8") as f:
                 self.calc_history_text.insert("1.0", f.read())
         self.apply_link_parsing(self.calc_history_text)
 
     def load_todo(self):
         if os.path.exists(self.todo_file) and os.path.getsize(self.todo_file) > 0:
-            with open(self.todo_file, "r") as f:
+            with open(self.todo_file, "r", encoding="utf-8") as f:
                 self.todo_text_area.insert("1.0", f.read())
         else:
             default_todo = (
@@ -1095,16 +1053,16 @@ class MiniSidekick:
 
     def save_notes(self):
         if not self.use_vim:
-            with open(self.note_file, "w") as f:
+            with open(self.note_file, "w", encoding="utf-8") as f:
                 f.write(self.text_area.get("1.0", tk.END).strip())
-            with open(self.cal_notes_file, "w") as f:
+            with open(self.cal_notes_file, "w", encoding="utf-8") as f:
                 f.write(self.cal_notes_text.get("1.0", tk.END).strip())
-            with open(self.todo_file, "w") as f:
+            with open(self.todo_file, "w", encoding="utf-8") as f:
                 f.write(self.todo_text_area.get("1.0", tk.END).strip())
-            with open(self.calc_history_file, "w") as f:
+            with open(self.calc_history_file, "w", encoding="utf-8") as f:
                 f.write(self.calc_history_text.get("1.0", tk.END).strip())
         else:
-            with open(self.calc_history_file, "w") as f:
+            with open(self.calc_history_file, "w", encoding="utf-8") as f:
                 f.write(self.calc_history_text.get("1.0", tk.END).strip())
 
     def toggle_window(self):
@@ -1123,17 +1081,7 @@ class MiniSidekick:
             self.save_notes()
 
         self.root.update_idletasks()
-
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-
-        window_width = 640
-        window_height = 555 if self.ai_visible else 500
-
-        x = (screen_width // 2) - (window_width // 2)
-        y = (screen_height // 2) - (window_height // 2)
-
-        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        self.cfg.set_value("Window", "geometry", self.root.geometry())
 
         self.root.deiconify()
         for win in self.sub_windows:
@@ -1155,6 +1103,7 @@ class MiniSidekick:
 
     def hide_window(self):
         self.save_notes()
+        self.cfg.set_value("Window", "geometry", self.root.geometry())
         self.root.withdraw()
         self.sub_windows = [w for w in self.sub_windows if w.winfo_exists()]
         for win in self.sub_windows:
@@ -1163,6 +1112,7 @@ class MiniSidekick:
 
     def quit_app(self):
         self.save_notes()
+        self.cfg.set_value("Window", "geometry", self.root.geometry())
         if self.hotkey_listener:
             self.hotkey_listener.stop()
         if os.path.exists(LOCK_FILE):
