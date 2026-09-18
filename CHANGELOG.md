@@ -1,3 +1,9 @@
+## 0.3.1 (2026-09-18)
+
+### Fix
+
+- commented out code for wiki like label links also add logging code (by default is off/False)
+
 ## 0.3.0 (2026-09-18)
 
 ### Feat
