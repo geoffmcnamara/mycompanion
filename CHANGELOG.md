@@ -1,8 +1,15 @@
-## Unreleased
+## 0.3.0 (2026-09-18)
 
 ### Feat
 
-- **mycompanion.py**: feat: added vim-edit (--vim) option to note and calendar
+- **mycompanion.py**: added mycompanion.conf default and saves. Also forced all files to be in (for linux) ~/.config/mycompanion/
+- **mycompanion.py**: added wiki-like capability, themes, and editable calc history
+- **mycompanion.py**: added todo pane and saveas for selected text button (ctrl-s)
+- **mycompanion.py**: added vim-edit (--vim) option to note and calendar
+
+### Fix
+
+- **mycompanion.py**: fix: ai query line at bottom of main pane
 
 ## 0.2.0 (2026-08-17)
 
