@@ -24,12 +24,12 @@ Tab 4: Todo – Ctrl-4: Dedicated task tracking pane to manage, edit, and organi
 - Set up your Gemini API Key: Generate an API key at Google AI Studio.
 
 Bash
-export GEMINI_API_KEY="AIzaSyYourKeyHere"
+export GEMINI_API_KEY="AI-YourKeyHere"
 SETUP GEMINI AI: (if you want AI Query/Response)
   1. Generate an API key at: https://aistudio.google.com/app/apikey 
      (create project name, import projects, create project api_key - this is subject to change) 
   2. Export the key in your terminal session before launching:
-     export GEMINI_API_KEY="AIzaSyYourKeyHere"
+     export GEMINI_API_KEY="AI-YourKeyHere"
 
 
 
@@ -40,10 +40,25 @@ Tkinter (usually bundled with Python on Linux/macOS/Windows)
 
 pynput (for global hotkey listening)
 
+
 You can install the required dependency via pip:
 
 Bash
 pip install pynput
+
+Using HTTPS:
+
+
+## 📥 Installation
+
+Bash
+pip install git+https://github.com/your-username/mycompanion.git
+
+
+Using SSH:
+Bash
+pip install git+ssh://git@github.com/your-username/mycompanion.git
+
 
 ## 🚀 Running the App
 Clone the repository and run the script directly from your terminal:
@@ -62,9 +77,9 @@ MyCompanion supports command-line flags for quick terminal editing:
     - use mycompanion.py --vim for launching vim as you editor for all edits
 
 ## 💻 Running navigation commands:
-    - Ctrl-q      to quit and drop mycompanion out of mempry (this is the only way to drop it out of mempry) It saves data and status on exit.
+    - Ctrl-q      to quit and drop mycompanion out of memory (this is the only way to drop it out of memory) It saves data and status on exit.
     - Ctrl-space  toggles all active windows to the top - or to drop them back into the background (but still resident in memory) all data and status is saved
-    - Ctrl-t      activates a theme selection window - slection gets saved to mycompanion.conf
+    - Ctrl-t      activates a theme selection window - selection gets saved to mycompanion.conf
     - Ctrl-1      make note pane active
     - Ctrl-2      make calc pane active
     - Ctrl-3      make calendar pane active
@@ -94,7 +109,7 @@ also uses when running:
 
 ## 🌐 wiki-like connections
     - wiki-like links: use [my_name](file:///home/user/dev/nts/myfile.nts) - link will turn green and allows opening the file names
-        Note: if you only use two slashes ie "//" the link becomes relative (be careful with this)
-    - url links are hihlighted in blue and when clicked will open a browser on that url - syntax: https://google.com 
+        Note: if you only use two slashes ie: "//" the link becomes relative (be careful with this)
+    - url links are highlighted in blue and when clicked will open a browser on that url - syntax: https://google.com 
 
 Enjoy!
