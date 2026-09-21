@@ -1,6 +1,6 @@
-# MyCompanion
+# 🧰 MyCompanion
 
-MyCompanion is a lightning-fast, lightweight desktop assistant that stays resident in the background, giving you instant access to quick notes, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey. Optional Gemini AI query and response.
+MyCompanion is a lightning-fast, lightweight desktop assistant (PIM Personal Information Manager) that stays resident in the background, giving you instant access to quick notes, a tod list, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey. Optional Gemini AI query and response.
 
 Designed for minimal friction and maximum speed, it runs quietly as a single-instance daemon and stays out of your way until you need it.
 
@@ -40,39 +40,44 @@ Python 3.x
 
 Tkinter (usually bundled with Python on Linux/macOS/Windows)
 
-pynput (for global hotkey listening)
-docopt (for usage and arg parsing)
+- pynput (for global hotkey listening)
+- docopt (for usage and arg parsing)
 
 You can install the required dependency via pip:
 
-Bash
+```Bash
 pip install pynput
 pip install docopt
-
-Using HTTPS:
+```
 
 
 ## 📥 Installation
 
-Bash
+```Bash
 pip install git+https://github.com/your-username/mycompanion.git
-
+```
 
 Using SSH:
-Bash
+```Bash
 pip install git+ssh://git@github.com/your-username/mycompanion.git
-
+```
 
 ## 🚀 Running the App
+
 Clone the repository and run the script directly from your terminal:
   
 (Optional) Install these if you want to use Gemini AI
+
+```Bash
 pip install google-genai 
 pip install tiktoken --prefer-binary # only if your system complains that it is missing
+```
 
-Bash
-python mycompanion.py
-On first launch, the program automatically spawns as a background daemon, handles its own lock fileing, and listens for your Ctrl + Space toggle.
+```Bash
+mycompanion.py
+```
+
+On first launch, the program automatically spawns as a background daemon, handles its own lock file, and listens for your Ctrl + Space toggle.
 
 ## 💻 Command-Line Interface
 
@@ -89,9 +94,9 @@ MyCompanion supports command-line flags for quick terminal editing:
     - Ctrl-2      make calc pane active
     - Ctrl-3      make calendar pane active
     - Ctrl-4      make todo pane active
-    - Ctrl-e      run a command (allows mode: terminal, window, or silent)
+    - Ctrl-r      run a command (allows mode: terminal, window, or silent)
     - Ctrl-a      activates AI query promt (at the bottom)
-    - Ctrl-c      view the mycompanion.conf file
+    - Alt-c       view the mycompanion.conf file
     - Ctrl-s      if text is selected a new file choice window opens and navigates to another file for saving the selected text. (There is a button for this as well)
 
 
@@ -113,6 +118,7 @@ Custom command entries defined in your configuration file support all primary co
 shortcut = <Alt-t>
 command = htop
 mode = terminal # mode could also be: window (ansi codes and emojies etc may not show correctly) | silent
+title = htop
 
 ```
 
@@ -130,7 +136,7 @@ To keep your data persistent between sessions, the app automatically creates loc
 
 ~/<platform_dependant>/{rootname}.conf  which holds geometry, position, theme, and under [Settings] --ai-mode and --vim-mode
 
-also uses when running:
+also uses a lock file when running:
 
 ~/<platform_dependant>/{rootname}.lock
 
@@ -140,4 +146,4 @@ also uses when running:
         Note: if you only use two slashes ie: "//" the link becomes relative (be careful with this)
     - url links are highlighted in blue and when clicked will open a browser on that url - syntax: https://google.com 
 
-Enjoy!
+### Enjoy!
