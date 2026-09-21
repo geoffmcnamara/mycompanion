@@ -16,7 +16,7 @@ Shortcuts:
     Ctrl-Space  Toggle window visibility
     Ctrl-1..4   Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)
     Ctrl-a      Toggle AI bar
-    Ctrl-c      View config file
+    Alt-c      View config file
     Ctrl-r      Run command dialog
     Ctrl-t      Open Theme Selector
     Ctrl-h / ?  Show Shortcuts & Help
@@ -535,7 +535,7 @@ class MiniSidekick:
 
         self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
         self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
-        self.root.bind("<Control-c>", lambda e: self.view_config_file())
+        self.root.bind("<Alt-c>",     lambda e: self.view_config_file())
         self.root.bind("<Control-E>", lambda e: self.edit_config_file())
         self.root.bind("<Control-t>", lambda e: self.open_theme_selector())
         self.root.bind("<Control-T>", lambda e: self.open_theme_selector())
@@ -1364,7 +1364,7 @@ class MiniSidekick:
             "  Ctrl-1..4    : Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)\n"
             "  Ctrl-a       : Toggle Gemini AI bar\n"
             "  Ctrl-v       : Edit file with vim if --vim option was used\n"
-            "  Ctrl-c       : View configuration file\n"
+            "  Alt-c        : View configuration file\n"
             "  Ctrl-r       : Run command dialog\n"
             "  Ctrl-t       : Open Theme Selector\n"
             "  Ctrl-h / ?   : Show this help window\n"
