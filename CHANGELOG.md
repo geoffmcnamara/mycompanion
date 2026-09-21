@@ -1,3 +1,14 @@
+## 0.4.0 (2026-09-21)
+
+### Feat
+
+- **mycompanion.py**: added config commands, added ability to view config, added ctrl-r run command
+
+### Fix
+
+- **mycompanion.py**: removed all references to ctrl-v
+- **mycompanion.py**: change ctrl-c to alt-c to avoid copy and paste issues
+
 ## 0.3.1 (2026-09-18)
 
 ### Fix
