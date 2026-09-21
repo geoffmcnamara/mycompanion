@@ -92,8 +92,6 @@ MyCompanion supports command-line flags for quick terminal editing:
     - Ctrl-e      run a command (allows mode: terminal, window, or silent)
     - Ctrl-a      activates AI query promt (at the bottom)
     - Ctrl-c      view the mycompanion.conf file
-    - Ctrl-v      active vim editing on current pane if --vim option is active 
-			      (a button is available as well)
     - Ctrl-s      if text is selected a new file choice window opens and navigates to another file for saving the selected text. (There is a button for this as well)
 
 

@@ -1363,7 +1363,6 @@ class MiniSidekick:
             "  Ctrl-Space   : Toggle main window visibility\n"
             "  Ctrl-1..4    : Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)\n"
             "  Ctrl-a       : Toggle Gemini AI bar\n"
-            "  Ctrl-v       : Edit file with vim if --vim option was used\n"
             "  Alt-c        : View configuration file\n"
             "  Ctrl-r       : Run command dialog\n"
             "  Ctrl-t       : Open Theme Selector\n"
