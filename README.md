@@ -9,6 +9,7 @@ A live header clock displays the current date, live time, and day of the week at
 The app allows wiki-like links to other files.
 
 ## ✨ Features
+
 Global Hotkey Toggle: Press Ctrl + Space from anywhere in your operating system to instantly pull up or hide the application window.
 
 Tab 1: Notes – Ctrl-1: A clean, distraction-free markdown/text scratchpad with automatic saving.
@@ -34,17 +35,19 @@ SETUP GEMINI AI: (if you want AI Query/Response)
 
 
 ## 🛠️ Prerequisites
+
 Python 3.x
 
 Tkinter (usually bundled with Python on Linux/macOS/Windows)
 
 pynput (for global hotkey listening)
-
+docopt (for usage and arg parsing)
 
 You can install the required dependency via pip:
 
 Bash
 pip install pynput
+pip install docopt
 
 Using HTTPS:
 
@@ -72,11 +75,13 @@ python mycompanion.py
 On first launch, the program automatically spawns as a background daemon, handles its own lock fileing, and listens for your Ctrl + Space toggle.
 
 ## 💻 Command-Line Interface
+
 MyCompanion supports command-line flags for quick terminal editing:
     - use mycompanion.py --ai for AI prompt query and response # see above for configuring Gemini AI
     - use mycompanion.py --vim for launching vim as you editor for all edits
 
 ## 💻 Running navigation commands:
+
     - Ctrl-q      to quit and drop mycompanion out of memory (this is the only way to drop it out of memory) It saves data and status on exit.
     - Ctrl-space  toggles all active windows to the top - or to drop them back into the background (but still resident in memory) all data and status is saved
     - Ctrl-t      activates a theme selection window - selection gets saved to mycompanion.conf
@@ -84,13 +89,37 @@ MyCompanion supports command-line flags for quick terminal editing:
     - Ctrl-2      make calc pane active
     - Ctrl-3      make calendar pane active
     - Ctrl-4      make todo pane active
-    - Ctrl-a      active AI query and response windows if ai has been set up
-    - Ctrl-v      active vim editing on current pane is vim mode option is active
+    - Ctrl-e      run a command (allows mode: terminal, window, or silent)
+    - Ctrl-a      activates AI query promt (at the bottom)
+    - Ctrl-c      view the mycompanion.conf file
+    - Ctrl-v      active vim editing on current pane if --vim option is active 
+			      (a button is available as well)
     - Ctrl-s      if text is selected a new file choice window opens and navigates to another file for saving the selected text. (There is a button for this as well)
 
-##
+
+---
+
+### Window Behavior
+
+> **Note:** `mycompanion` is configured as a floating, topmost window that stays on top of all other active desktop windows. To minimize or hide the app, press **`Ctrl+Space`** or click anywhere on the **footer status message** at the bottom of the window.
+
+---
+
+### Configuration Syntax (`cmd_*`)
+
+Custom command entries defined in your configuration file support all primary command execution options:
+
+```ini
+
+[cmd_htop]
+shortcut = <Alt-t>
+command = htop
+mode = terminal # mode could also be: window (ansi codes and emojies etc may not show correctly) | silent
+
+```
 
 ## 📁 Generated Files
+
 To keep your data persistent between sessions, the app automatically creates local text files in your home directory based on the script's root name:
 
 ~/r<platform_dependant>/{rootname}_notes.txt
@@ -108,6 +137,7 @@ also uses when running:
 ~/<platform_dependant>/{rootname}.lock
 
 ## 🌐 wiki-like connections
+
     - wiki-like links: use [my_name](file:///home/user/dev/nts/myfile.nts) - link will turn green and allows opening the file names
         Note: if you only use two slashes ie: "//" the link becomes relative (be careful with this)
     - url links are highlighted in blue and when clicked will open a browser on that url - syntax: https://google.com 
