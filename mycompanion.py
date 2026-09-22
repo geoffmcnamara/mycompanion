@@ -50,7 +50,7 @@ import webbrowser
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.3.5a"
+VERSION = "0.4.0"
 DEBUG = False
 
 
