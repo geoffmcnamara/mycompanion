@@ -1,3 +1,13 @@
+## 0.5.0a0 (2026-09-22)
+
+### Feat
+
+- start winterm ops
+
+### Fix
+
+- **config**: synchronize baseline version 0.4.0 across files
+
 ## 0.4.0 (2026-09-21)
 
 ### Feat
