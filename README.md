@@ -94,7 +94,7 @@ MyCompanion supports command-line flags for quick terminal editing:
     - Ctrl-2      make calc pane active
     - Ctrl-3      make calendar pane active
     - Ctrl-4      make todo pane active
-    - Ctrl-r      run a command (allows mode: terminal, window, or silent)
+    - Ctrl-r      run a command (allows mode: terminal, window, silent or raw)
     - Ctrl-a      activates AI query promt (at the bottom)
     - Alt-c       view the mycompanion.conf file
     - Ctrl-s      if text is selected a new file choice window opens and navigates to another file for saving the selected text. (There is a button for this as well)
@@ -117,8 +117,18 @@ Custom command entries defined in your configuration file support all primary co
 [cmd_htop]
 shortcut = <Alt-t>
 command = htop
-mode = terminal # mode could also be: window (ansi codes and emojies etc may not show correctly) | silent
+mode = terminal # mode could also be: window (ansi codes and emojies etc may not show correctly) | silent | raw (command is executed as is; no window or terminal wrapper)
 title = htop
+
+shortcut = <Control-Shift-F>
+mode = terminal
+command = /home/geoffm/dev/python/econ/finsyms.py
+title = finsyms
+
+[cmd_xterm]
+shortcut = <Control-Shift-x>
+cmd = xterm -geometry 180x40 -T 'Weather Report' -e bash -c 'curl -s wttr.in/Elizabeth_City ; echo "Please use Ctrl-D to exit" ; exec bash --norc'
+mode = raw
 
 ```
 

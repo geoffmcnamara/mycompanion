@@ -4,13 +4,15 @@
      mycompanion.py
 =======================
 Usage:
-    mycompanion.py [--ai] [--vim]
+    mycompanion.py [--ai] [--vim] [--log] [--debug]
     mycompanion.py (-h | --help)
 
 Options:
     -h --help   Show help and storage paths.
     --ai        Start with AI bar open.
     --vim       Enable external Vim editing.
+    -l --log    Log stdout/stderr to mycompanion.log.
+    -d --debug  Enable debug output and run in foreground.
 
 Shortcuts:
     Ctrl-Space  Toggle window visibility
@@ -37,6 +39,7 @@ import json
 import configparser
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from tkinter import ttk
 from pynput import keyboard
 import subprocess
 import calendar
@@ -52,9 +55,11 @@ ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
 VERSION = "0.5.0a0"
 DEBUG = False
+# DEBUG = True  # uncomment this to initiate debugging
+if DEBUG:
+    import inspect
 
 
-LOG_FLAG = False
 
 if sys.platform == "darwin":
     DATA_DIR = Path.home() / "Library" / "Application Support" / ROOTNAME
@@ -78,7 +83,7 @@ CALC_NOTES_FILE = DATA_DIR / f"{ROOTNAME}_calc_notes.txt"
 TODO_FILE = DATA_DIR / f"{ROOTNAME}_todo.txt"
 CONFIG_FILE = STATE_DIR / f"{ROOTNAME}.conf"
 LOCK_FILE = STATE_DIR / f"{ROOTNAME}.lock"
-LOG_FILE = DATA_DIR / "daemon.log"
+LOG_FILE = DATA_DIR / f"{ROOTNAME}.log"
 
 THEMES = {
     "Cyan / Black": {
@@ -139,23 +144,241 @@ DEFAULT_CONFIG = {
     "Theme": {"name": "Dark / White (Default)"}
 }
 
+
 def dbug(msg: str) -> None:
     """Helper function to print debug messages only when DEBUG is enabled."""
     if DEBUG:
-        print(f"[DEBUG] {msg}")
+        frame = inspect.currentframe().f_back
+        lineno = frame.f_lineno
+        print(f"[DEBUG L{lineno}] {msg}")
 
-def setup_logging():
-    if os.environ.get("SIDEKICK_DAEMON") == "1" and LOG_FLAG:
-        log_fp = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
-        sys.stdout = log_fp
-        sys.stderr = log_fp
 
+# ----------------------------------------------------------------------
+# Top-level standalone helper function
+# ----------------------------------------------------------------------
+def sanitize_geometry(geom_str, min_w=200, min_h=200, default_w=600, default_h=400):
+    """
+    Validates a Tkinter geometry string (e.g. '800x600+100+100').
+    If width < min_w or height < min_h, returns safe default dimensions.
+    """
+    if not geom_str or not isinstance(geom_str, str):
+        return f"{default_w}x{default_h}"
+
+    match = re.match(r"^(\d+)x(\d+)([\+-].*)?$", geom_str.strip())
+    if not match:
+        return f"{default_w}x{default_h}"
+
+    w, h, offsets = match.groups()
+    w, h = int(w), int(h)
+
+    if w < min_w or h < min_h:
+        w, h = default_w, default_h
+
+    offsets_str = offsets if offsets else ""
+    return f"{w}x{h}{offsets_str}"
+
+
+class ConfigViewerWindow(tk.Toplevel):
+    def __init__(self, parent, config_path, geometry="850x750", app=None):
+        super().__init__(parent)
+        self.parent = parent
+        self.app = app
+        self.config_path = config_path
+        self.title("Configuration Viewer & Quick Launch")
+        self.geometry(geometry)
+
+        self.lift()
+        self.focus_force()
+
+        # Resolve palette from app or fall back to 'Dark / White (Default)'
+        self.theme = self._resolve_theme_palette()
+
+        self.bg_color = self.theme.get("bg", "#1e1e1e")
+        self.fg_color = self.theme.get("fg", "#d4d4d4")
+        self.panel_bg = self.theme.get("panel_bg", self.bg_color)
+        self.btn_bg = self.theme.get("btn_bg", "#333333")
+        self.btn_fg = self.theme.get("btn_fg", "#ffffff")
+
+        # Set Toplevel background
+        self.configure(bg=self.bg_color)
+
+        self.bind("<Escape>", lambda e: self.destroy())
+        self._build_ui()
+
+    def _resolve_theme_palette(self):
+        """Extract the active theme dict from app, module globals, or default."""
+        # 1. Check if app carries the theme dict directly
+        if self.app:
+            if hasattr(self.app, "current_theme") and isinstance(self.app.current_theme, dict):
+                return self.app.current_theme
+            if hasattr(self.app, "theme") and isinstance(self.app.theme, dict):
+                return self.app.theme
+            if hasattr(self.app, "colors") and isinstance(self.app.colors, dict):
+                return self.app.colors
+
+            # 2. Check if app tracks current theme by string name (e.g., self.app.current_theme_name)
+            theme_name = None
+            for attr in ["current_theme_name", "theme_name", "active_theme"]:
+                if hasattr(self.app, attr):
+                    theme_name = getattr(self.app, attr)
+                    break
+
+            if theme_name and "THEMES" in globals() and theme_name in globals()["THEMES"]:
+                return globals()["THEMES"][theme_name]
+
+        # 3. Fallback check on globals directly
+        if "THEMES" in globals():
+            # Attempt to grab active theme name or default to 'Dark / White (Default)'
+            themes = globals()["THEMES"]
+            return themes.get("Dark / White (Default)", next(iter(themes.values())))
+
+        # Fallback dictionary if all else fails
+        return {
+            "bg": "#1e1e1e", "fg": "#d4d4d4", "header_bg": "#1a1a1a",
+            "nav_bg": "#2d2d2d", "panel_bg": "#2d2d2d", "btn_bg": "#333333",
+            "btn_fg": "#ffffff", "insert_bg": "#ffffff"
+        }
+
+    def _build_ui(self):
+        # Header
+        top_frame = tk.Frame(self, bg=self.theme.get("header_bg", self.bg_color), padx=10, pady=10)
+        top_frame.pack(side=tk.TOP, fill=tk.X)
+
+        tk.Label(
+            top_frame,
+            text="Configuration Shortcuts (Click Shortcut Button to Launch)",
+            font=("TkDefaultFont", 11, "bold"),
+            bg=self.theme.get("header_bg", self.bg_color),
+            fg=self.fg_color
+        ).pack(anchor=tk.W)
+
+        # Scrollable Area Container
+        container = tk.Frame(self, bg=self.bg_color, padx=10, pady=5)
+        container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        canvas = tk.Canvas(
+            container,
+            bg=self.bg_color,
+            highlightbackground=self.bg_color,
+            highlightcolor=self.bg_color,
+            highlightthickness=0,
+            bd=0,
+            relief=tk.FLAT
+        )
+
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        scroll_frame = tk.Frame(canvas, bg=self.bg_color)
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(canvas_window, width=event.width)
+
+        canvas_window = canvas.create_window((0, 0), window=scroll_frame, anchor="nw")
+        canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _update_scrollregion(e):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            scroll_frame.configure(bg=self.bg_color)
+
+        scroll_frame.bind("<Configure>", _update_scrollregion)
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Parse and Render Shortcut Cards
+        cp = configparser.ConfigParser()
+        cp.read(self.config_path, encoding="utf-8")
+
+        def make_handler(c, m, t, g):
+            def handler():
+                if self.app and hasattr(self.app, "run_command"):
+                    self.app.run_command(cmd_str=c, open_in=m, title=t, geometry=g)
+            return handler
+
+        for section in cp.sections():
+            if section.startswith("cmd_"):
+                cmd_name = section.replace("cmd_", "").upper()
+                shortcut = cp.get(section, "shortcut", fallback="RUN")
+
+                cmd_val = cp.get(section, "command", fallback=cp.get(section, "cmd", fallback="")).strip()
+                mode_val = cp.get(section, "mode", fallback="terminal").strip()
+                title_val = cp.get(section, "title", fallback=cmd_name).strip()
+                geom_val = cp.get(section, "geometry", fallback="").strip()
+
+                if not cmd_val:
+                    continue
+
+                # Shortcut Card Box matching theme panel_bg
+                row = tk.LabelFrame(
+                    scroll_frame,
+                    text=f" [{section}] ",
+                    font=("TkDefaultFont", 10, "bold"),
+                    bg=self.panel_bg,
+                    fg=self.fg_color,
+                    highlightbackground=self.bg_color,
+                    highlightthickness=1,
+                    padx=10,
+                    pady=8
+                )
+                row.pack(fill=tk.X, expand=True, pady=5, padx=5)
+
+                # Shortcut Button matching theme btn_bg and btn_fg
+                btn = tk.Button(
+                    row,
+                    text=f"⚡ {shortcut}",
+                    font=("TkDefaultFont", 9, "bold"),
+                    bg=self.btn_bg,
+                    fg=self.btn_fg,
+                    activebackground=self.btn_fg,
+                    activeforeground=self.btn_bg,
+                    highlightbackground=self.panel_bg,
+                    relief=tk.RAISED,
+                    bd=2,
+                    command=make_handler(cmd_val, mode_val, title_val, geom_val)
+                )
+                btn.pack(side=tk.LEFT, padx=(0, 10), anchor=tk.N)
+
+                # Details Frame
+                details_frame = tk.Frame(row, bg=self.panel_bg)
+                details_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+                lbl_info = tk.Label(
+                    details_frame,
+                    text=f"Mode: {mode_val}  |  Title: {title_val}  |  Geom: {geom_val or 'default'}",
+                    font=("TkDefaultFont", 9, "bold"),
+                    bg=self.panel_bg,
+                    fg=self.fg_color
+                )
+                lbl_info.pack(anchor=tk.W)
+
+                lbl_cmd = tk.Label(
+                    details_frame,
+                    text=f"Command: {cmd_val}",
+                    wraplength=550,
+                    justify=tk.LEFT,
+                    bg=self.panel_bg,
+                    fg=self.fg_color
+                )
+                lbl_cmd.pack(anchor=tk.W, pady=(2, 0))
+
+
+# ----------------------------------------------------------------------
+# Configuration Manager Class
+# ----------------------------------------------------------------------
 class ConfigManager:
     """Manages application configuration via mycompanion.conf (INI format)."""
     def __init__(self, filepath=CONFIG_FILE):
         self.filepath = Path(filepath)
         self.config = configparser.ConfigParser()
+        # if DEBUG:
+            # for section in self.config.sections():
+                # dbug(f"[{section}]")
+                # for key, value in self.config.items(section):
+                    # dbug(f"  {key} = {value}")
+                # print()
+            # pass
         self.load_config()
+        # """--== SEP_LINE ==--""" #
 
     def load_config(self):
         if not self.filepath.exists():
@@ -163,12 +386,30 @@ class ConfigManager:
             self.save_config()
         else:
             self.config.read(self.filepath, encoding="utf-8")
+            # if DEBUG:
+            #     # --- DEBUG REPR INSPECTION ---
+            #     for sec in self.config.sections():
+            #         for k, v in self.config.items(sec):
+            #             dbug(f"READ -> [{sec}] {k} = {repr(v)}")
+            #             print("v: " + v)
+            #     # -----------------------------
+            # dbug(f"{self.config.read(self.filepath, encoding='utf-8')=}")
             for section, keys in DEFAULT_CONFIG.items():
+                # dbug(f"{section=} {keys=}")
                 if not self.config.has_section(section):
                     self.config.add_section(section)
                 for key, val in keys.items():
                     if not self.config.has_option(section, key):
                         self.config.set(section, key, val)
+                        # dbug(f"{section=} {key=} {val=}")
+        # --- SANITIZE GEOMETRY HERE ---
+        # Adjust 'Window' or 'geometry' to match your actual config section/key names
+        section_name = "Window" if self.config.has_section("Window") else "General"
+        if self.config.has_option(section_name, "geometry"):
+            raw_geom = self.config.get(section_name, "geometry")
+            safe_geom = sanitize_geometry(raw_geom, min_w=200, min_h=200, default_w=600, default_h=400)
+            self.config.set(section_name, "geometry", safe_geom)
+        # """--== SEP_LINE ==--""" #
 
     def save_config(self):
         try:
@@ -180,50 +421,148 @@ class ConfigManager:
                         if not disk_config.has_section(section):
                             disk_config.add_section(section)
                         for key, val in self.config.items(section):
+                            # dbug(f"{key=} {val=}")
                             disk_config.set(section, key, val)
                     self.config = disk_config
                 except Exception as e:
                     print(f"Config load error: {e}")
-
             with open(self.filepath, "w", encoding="utf-8") as f:
                 self.config.write(f)
         except Exception as e:
             print(f"Failed to save config: {e}")
-
+        # """--== SEP_LINE ==--""" #
     def get_bool(self, section, key, default=False):
+        # dbug(f"{section=} {key=}")
         try:
             return self.config.getboolean(section, key)
         except Exception:
             return default
-
+        # """--== SEP_LINE ==--""" #
     def get_string(self, section, key, default=""):
         return self.config.get(section, key, fallback=default)
-
+        # dbug(f"{section=} {key=}")
+        # """--== SEP_LINE ==--""" #
     def set_value(self, section, key, value):
         if not self.config.has_section(section):
             self.config.add_section(section)
         self.config.set(section, key, str(value))
+        # dbug(f"{section=} {key=} {str(value)=}")
         self.save_config()
-
+        # """--== SEP_LINE ==--""" #
+    def _get_flexible(self, section_proxy, keys, default=""):
+        """ 
+        Utility to retrieve the first matching key from a list of alias keys. 
+        """
+        for k in keys:
+            if k in section_proxy:
+                # dbug(f"{k=}")
+                return section_proxy.get(k, "").strip()
+        return default
+        # """--== SEP_LINE ==--""" #
     def get_custom_commands(self):
         commands = []
+        # Alias map for normalized execution modes
+        VALID_MODES = {
+            "window": "window",
+            "win": "window",
+            "terminal": "terminal",
+            "term": "terminal",
+            "silent": "silent",
+            "quiet": "silent",
+            "raw": "raw",
+            "exec": "raw",
+            "direct": "raw",
+        }
         for section in self.config.sections():
             if section.startswith("cmd_") or section.startswith("command_"):
                 sec = self.config[section]
-                shortcut = sec.get("shortcut", "").strip()
-                cmd_str = sec.get("command", "").strip()
+                # """--== SEP_LINE ==--""" #
+                # Key Aliases
+                shortcut = self._get_flexible(sec, ["shortcut", "key", "bind"])
+                cmd_str = self._get_flexible(sec, ["command", "cmd", "exec", "run"])
+                # dbug(f"{cmd_str=} {sec=}")
+                # """--== SEP_LINE ==--""" #
                 if not shortcut or not cmd_str:
+                    print(f"Warning: [{section}] missing required shortcut or command key. Skipping.")
                     continue
+                    # """--== SEP_LINE ==--""" #
+                # Mode resolution and validation
+                raw_mode = self._get_flexible(sec, ["mode", "type"], default="window").lower()
+                if raw_mode in VALID_MODES:
+                    mode = VALID_MODES[raw_mode]
+                else:
+                    print(f"Warning: [{section}] unrecognized mode '{raw_mode}'. Defaulting to 'window'.")
+                    mode = "window"
+                    # """--== SEP_LINE ==--""" #
+                title = self._get_flexible(sec, ["title", "name"], default=cmd_str)
+                geometry = self._get_flexible(sec, ["geometry", "geom", "size"])
+                # """--== SEP_LINE ==--""" #
                 commands.append({
                     "section": section,
                     "shortcut": shortcut,
                     "command": cmd_str,
-                    "mode": sec.get("mode", "window").strip().lower(),
-                    "title": sec.get("title", cmd_str).strip()
+                    "mode": mode,
+                    "title": title,
+                    "geometry": geometry,
                 })
         return commands
     # ### EOB class ConfigManager: ### #
 
+
+def normalize_tk_shortcut(raw_shortcut: str) -> str:
+    """
+    Normalizes sloppy, alias-heavy, or unbracketed shortcut strings into standard Tkinter sequence strings.
+    
+    Examples:
+      'Control-Shift-w'     -> '<Control-Shift-W>'
+      'ctrl-shft-w'        -> '<Control-Shift-W>'
+      'Ctrl-shift-w'       -> '<Control-Shift-W>'
+      '<Control-Key-Shift-w>' -> '<Control-Shift-W>'
+      'alt-ctrl-t'         -> '<Control-Alt-t>'
+    """
+    # 1. Map common human aliases to standard Tkinter modifier names
+    ALIAS_MAP = {
+        "ctrl": "Control",
+        "cntrl": "Control",
+        "control": "Control",
+        "shift": "Shift",
+        "shft": "Shift",
+        "sft": "Shift",
+        "alt": "Alt",
+        "option": "Alt",
+        "opt": "Alt",
+        "cmd": "Command",
+        "meta": "Meta",
+    }
+
+    # Clean out surrounding brackets and redundant 'Key-' prefixes
+    inner = raw_shortcut.strip("<>").replace("Key-", "")
+    parts = [p.strip() for p in inner.split("-") if p.strip()]
+    
+    if not parts:
+        return raw_shortcut
+
+    # Key is always the last token; everything prior is a modifier
+    raw_key = parts[-1]
+    raw_modifiers = parts[:-1]
+
+    # 2. Normalize modifier names using the alias map
+    modifiers = []
+    for mod in raw_modifiers:
+        mod_lower = mod.lower()
+        normalized_mod = ALIAS_MAP.get(mod_lower, mod.capitalize())
+        if normalized_mod not in modifiers:
+            modifiers.append(normalized_mod)
+
+    # 3. Handle key casing for Shift combinations
+    key = raw_key
+    if "Shift" in modifiers and len(key) == 1 and key.islower():
+        key = key.upper()
+
+    # 4. Reconstruct clean, bracketed Tkinter event sequence
+    if modifiers:
+        return f"<{'-'.join(modifiers)}-{key}>"
+    return f"<{key}>"
 
 def print_help_and_paths():
     print(__doc__)
@@ -240,17 +579,20 @@ def print_help_and_paths():
     print("companionway.net © 2026")
     print("----------------------------------------")
 
-def ensure_daemon():
+
+def ensure_daemon(doc_args):
+    global DEBUG
     script_path = os.path.abspath(__file__)
     python_exec = sys.executable
 
+    # 1. Lockfile check
     if os.path.exists(LOCK_FILE):
         try:
             with open(LOCK_FILE, "r", encoding="utf-8") as f:
                 old_pid = int(f.read().strip())
             os.kill(old_pid, 0)
             print(f"MyCompanion is already running (PID {old_pid}).")
-            print("Use Ctrl-space to toggle the window.")
+            print("Use Ctrl-Space to toggle the window.")
             print(f"Lock file location: {LOCK_FILE}")
             sys.exit(0)
         except (ProcessLookupError, ValueError):
@@ -261,41 +603,123 @@ def ensure_daemon():
         except PermissionError:
             sys.exit(0)
 
+    # 2. Main launch handling
     if os.environ.get("SIDEKICK_DAEMON") != "1":
+        # if DEBUG:
+        #     print("[DEBUG] Running in foreground debug mode...", flush=True)
+        #     os.environ["SIDEKICK_DAEMON"] = "1"
+        #     return  # <-- Stops backgrounding and keeps terminal attached
+
+        # Always print startup help and storage paths on launch
         print_help_and_paths()
 
+        # Handle --log setup if requested
+        log_handle = None
+        if doc_args.get("--log"):
+            log_handle = open(LOG_FILE, "a", encoding="utf-8", buffering=1)
+
+        if DEBUG:
+            # Foreground / Debug Execution
+            os.environ["SIDEKICK_DAEMON"] = "1"
+            if log_handle:
+                # Tee/redirect standard output streams to log file while keeping terminal attached
+                sys.stdout = log_handle
+                sys.stderr = log_handle
+            return
+
+        # Background Daemon Spawn Execution
         new_env = os.environ.copy()
         new_env["SIDEKICK_DAEMON"] = "1"
-
-        args = [python_exec, script_path] + sys.argv[1:]
-
-        dbug(f"now running {args=} in subprocess")
+        args_list = [python_exec, script_path] + sys.argv[1:]
 
         popen_kwargs = {
             "env": new_env,
             "start_new_session": True,
+            "stdin": subprocess.DEVNULL,
         }
 
-        # Route streams based on DEBUG mode
-        if not DEBUG:
-            popen_kwargs.update({
-                "stdout": subprocess.DEVNULL,
-                "stderr": subprocess.DEVNULL,
-                "stdin": subprocess.DEVNULL,
-            })
+        if log_handle:
+            popen_kwargs["stdout"] = log_handle
+            popen_kwargs["stderr"] = log_handle
+        else:
+            popen_kwargs["stdout"] = subprocess.DEVNULL
+            popen_kwargs["stderr"] = subprocess.DEVNULL
 
-        subprocess.Popen(args, **popen_kwargs)
-
-        dbug("finished with Popen now...")
+        subprocess.Popen(args_list, **popen_kwargs)
         sys.exit(0)
     else:
-        setup_logging()
+        # Child daemon initialization
         with open(LOCK_FILE, "w", encoding="utf-8") as f:
             f.write(str(os.getpid()))
+    # ### EOB def ensure_daemon(): ### #
 
 
+# def ensure_daemon(doc_args):
+#     script_path = os.path.abspath(__file__)
+#     python_exec = sys.executable
+# 
+#     # Check lockfile
+#     if os.path.exists(LOCK_FILE):
+#         try:
+#             with open(LOCK_FILE, "r", encoding="utf-8") as f:
+#                 old_pid = int(f.read().strip())
+#             os.kill(old_pid, 0)
+#             print(f"MyCompanion is already running (PID {old_pid}).")
+#             print("Use Ctrl-space to toggle the window.")
+#             print(f"Lock file location: {LOCK_FILE}")
+#             sys.exit(0)
+#         except (ProcessLookupError, ValueError):
+#             try:
+#                 os.remove(LOCK_FILE)
+#             except OSError:
+#                 pass
+#         except PermissionError:
+#             sys.exit(0)
+# 
+#     # Parent CLI launcher process
+#     if os.environ.get("SIDEKICK_DAEMON") != "1":
+#         if DEBUG:
+#             os.environ["SIDEKICK_DAEMON"] = "1"
+#             return
+# 
+#         print_help_and_paths()
+# 
+#         new_env = os.environ.copy()
+#         new_env["SIDEKICK_DAEMON"] = "1"
+# 
+#         args_list = [python_exec, script_path] + sys.argv[1:]
+# 
+#         popen_kwargs = {
+#             "env": new_env,
+#             "start_new_session": True,
+#             "stdin": subprocess.DEVNULL,
+#         }
+# 
+#         # Check docopt parsed arguments for --log
+#         if doc_args.get("--log"):
+#             log_fp = open(LOG_FILE, "a", encoding="utf-8")
+#             popen_kwargs["stdout"] = log_fp
+#             popen_kwargs["stderr"] = log_fp
+#         elif DEBUG:
+#             pass  # Leave terminal streams open for debugging
+#         else:
+#             popen_kwargs["stdout"] = subprocess.DEVNULL
+#             popen_kwargs["stderr"] = subprocess.DEVNULL
+# 
+#         subprocess.Popen(args_list, **popen_kwargs)
+#         sys.exit(0)
+#     else:
+#         # Child daemon process
+#         with open(LOCK_FILE, "w", encoding="utf-8") as f:
+#             f.write(str(os.getpid()))
+#     # ### EOB def ensure_daemon(): ### #
+
+
+# ----------------------------------------------------------------------
+# MiniSidekick Class
+# ----------------------------------------------------------------------
 class MiniSidekick:
-    def __init__(self, start_with_ai=False, use_vim=False):
+    def __init__(self, start_with_ai=False, use_vim=False, doc_args=None, **kwargs):
         self.cfg = ConfigManager()
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
@@ -303,7 +727,18 @@ class MiniSidekick:
         self.todo_file = TODO_FILE
 
         self.use_vim = use_vim or self.cfg.get_bool("Settings", "vim_mode", False)
-        self.enable_ai = start_with_ai
+        # self.enable_ai = start_with_ai
+        self.enable_ai = start_with_ai or self.cfg.get_bool("Settings", "ai_mode", False)
+
+        if self.enable_ai:
+            if not os.environ.get("GEMINI_API_KEY"):
+                messagebox.showerror(
+                    "Missing API Key",
+                    "GEMINI_API_KEY environment variable is not defined.\n\n"
+                    "Please set it prior to startup with --ai:\n"
+                    'export GEMINI_API_KEY="my_ai_google_key"'
+                )
+                self.enable_ai = False  # Gracefully fall back to non-AI mode
 
         self.root = tk.Tk()
         
@@ -404,7 +839,10 @@ class MiniSidekick:
         self.notes_lbl_widget.pack(side=tk.LEFT)
 
         tk.Button(self.notes_ctrl_frame, text="Save Selected As", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
-        tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        # tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+
+        if self.enable_ai:
+            tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         if self.use_vim:
             tk.Button(self.notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
@@ -557,6 +995,7 @@ class MiniSidekick:
         self.current_theme_name = self.load_saved_theme()
         self.apply_theme(self.current_theme_name)
 
+
     def bind_custom_commands(self):
         custom_cmds = self.cfg.get_custom_commands()
         for item in custom_cmds:
@@ -564,40 +1003,28 @@ class MiniSidekick:
             cmd_str = item["command"]
             mode = item["mode"]
             cmd_title = item.get("title", "MyCompanion")
+            cmd_geom = item.get("geometry", "")
 
-            tk_seqs = [raw_shortcut]
+            # Always normalize to a single, valid Tkinter sequence
+            seq = normalize_tk_shortcut(raw_shortcut)
 
-            # Handle standard <Control-x> -> <Control-Key-x>
-            if raw_shortcut.startswith("<Control-") and not raw_shortcut.startswith("<Control-Key-"):
-                key_char = raw_shortcut[len("<Control-"):-1]
-                tk_seqs.append(f"<Control-Key-{key_char}>")
-
-            # Handle Shift + Letter combinations automatically (e.g. <Control-Shift-f> -> <Control-Shift-F>)
-            if "Shift-" in raw_shortcut and len(raw_shortcut) >= 3 and raw_shortcut[-2].islower():
-                char = raw_shortcut[-2].upper()
-                tk_seqs.append(raw_shortcut[:-2] + char + ">")
-
-            for seq in set(tk_seqs):
-                try:
-                    self.root.bind(
-                        seq,
-                        lambda e, c=cmd_str, m=mode, t=cmd_title: (self.run_command(c, open_in=m, title=t), "break")[1]
-                    )
-                except tk.TclError as err:
-                    print(f"Warning: Failed to bind custom shortcut '{seq}': {err}")
+            try:
+                # dbug(f"{cmd_str=}")
+                self.root.bind(
+                    seq,
+                    lambda e, c=cmd_str, m=mode, t=cmd_title, g=cmd_geom: (
+                    self.run_command(c, open_in=m, title=t, geometry=g),  
+                    "break",
+                )[1],
+                    # lambda e, c=cmd_str, m=mode, t=cmd_title: ( self.run_command(c, open_in=m, title=t), "break",)[1],
+                )
+            except tk.TclError as err:
+                print(f"Warning: Failed to bind custom shortcut '{seq}': {err}")
+                
 
     def view_config_file(self):
-        self.open_file_subwindow(CONFIG_FILE, read_only=True)
+        self.config_viewer = ConfigViewerWindow(self.root, CONFIG_FILE, geometry="850x750", app=self)
         return "break"
-
-    # def edit_config_file(self):
-    #     if self.use_vim:
-    #         dummy_widget = tk.Text(self.root)
-    #         self.open_in_vim(CONFIG_FILE, dummy_widget)
-    #         self.root.after(1000, lambda: (self.cfg.load_config(), self.bind_custom_commands()))
-    #     else:
-    #         self.open_file_subwindow(CONFIG_FILE)
-    #     return "break"
 
     def load_saved_theme(self):
         theme_name = self.cfg.get_string("Theme", "name", "Dark / White (Default)")
@@ -830,72 +1257,6 @@ class MiniSidekick:
         )
         status_lbl.pack(side=tk.LEFT, padx=5)
 
-
-   #  def open_file_subwindow(self, file_path):
-   #      path = Path(file_path)
-
-   #      try:
-   #          if not path.exists():
-   #              path.parent.mkdir(parents=True, exist_ok=True)
-   #              path.touch()
-   #      except Exception as err:
-   #          messagebox.showerror("File Error", f"Could not create file:\n{err}")
-   #          return
-
-   #      win = tk.Toplevel(self.root)
-   #      win.title(path.name)
-   #      win.geometry("600x450")
-   #      win.attributes("-topmost", True)
-
-   #      colors = THEMES[self.current_theme_name]
-   #      win.configure(bg=colors["bg"])
-   #      self.sub_windows.append(win)
-   #      win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
-
-   #      top_bar = tk.Frame(win, bg=colors["panel_bg"], pady=4, padx=10)
-   #      top_bar.pack(side=tk.TOP, fill=tk.X)
-
-   #      path_label = tk.Label(top_bar, text=str(path), bg=colors["panel_bg"], fg=colors["fg"], font=("Monospace", 9, "bold"), anchor="w")
-   #      path_label.pack(side=tk.LEFT, expand=True, fill=tk.X)
-
-   #      def delete_file():
-   #          confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {path.name}?", parent=win)
-   #          if confirm:
-   #              try:
-   #                  if path.exists():
-   #                      path.unlink()
-   #                  win.destroy()
-   #              except Exception as err:
-   #                  messagebox.showerror("Delete Error", f"Could not delete file:\n{err}", parent=win)
-
-   #      delete_btn = tk.Button(
-   #          top_bar, text="Delete Note", command=delete_file,
-   #          bg="#8b0000", fg="#fff", activebackground="#a00000", activeforeground="#fff",
-   #          bd=0, padx=8, pady=2, font=("Monospace", 8, "bold")
-   #      )
-   #      delete_btn.pack(side=tk.RIGHT)
-
-   #      editor = tk.Text(
-   #          win, wrap=tk.WORD, bg=colors["bg"], fg=colors["fg"],
-   #          insertbackground=colors["insert_bg"], font=("Monospace", 11),
-   #          bd=0, padx=10, pady=10
-   #      )
-   #      editor.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
-
-   #      try:
-   #          with open(path, "r", encoding="utf-8") as f:
-   #              editor.insert("1.0", f.read())
-   #      except Exception as err:
-   #          messagebox.showerror("File Error", f"Could not read file:\n{err}")
-
-   #      editor.bind("<KeyRelease>", lambda e: self.apply_link_parsing(editor))
-   #      self.apply_link_parsing(editor)
-
-   #      ctrl_frame = tk.Frame(win, bg=colors["panel_bg"], pady=6, padx=10)
-   #      ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-   #      status_lbl = tk.Label(ctrl_frame, text="", bg=colors["panel_bg"], fg="#4ec9b0", font=("Monospace", 9))
-   #      status_lbl.pack(side=tk.LEFT, padx=5)
 
         def save_file(event=None):
             if not path.exists():
@@ -1404,39 +1765,88 @@ class MiniSidekick:
         return "break"
         # ### EOB def show_help_legend(self, event=None): ### #
 
-    def open_in_terminal(self, cmd_str, title=None):
-        import shlex
+
+    def open_raw(self, cmd_str):
+        """Executes a command string directly in a background shell without interference."""
+        # dbug(f"{cmd_str=}")
+        try:
+            subprocess.Popen(cmd_str, shell=True, stdout=None, stderr=None, stdin=None)
+        except Exception as e:
+            print(f"Failed to execute raw command '{cmd_str}': {e}")
+
+
+    def open_in_terminal( self, cmd_str, title=None, geometry="180x40", font=None, hold_mode="active", **kwargs,):
+        """Launches a command string inside an available terminal emulator.
+        Args:
+            cmd_str (str): The bash command/script to execute.
+            title (str, optional): Title for the terminal window.
+            geometry (str, optional): Window dimensions e.g. "180x40". Defaults to
+              "180x40".
+            font (str, optional): Terminal font override string (reserved for future
+              use).
+            hold_mode (str, optional): Strategy after process finishes:
+                - "active": keeps interactive shell alive with 'exec bash --norc'.
+                - "ask": prompts user to press Enter to close the window.
+                - "none": exits window immediately upon completion.
+        """
+        #  mycompanion.conf [cmd_*] (geometry) 
+        # → ConfigManager.get_custom_commands() 
+        # → MiniSidekick.bind_custom_commands() 
+        # → MiniSidekick.run_command(..., geometry=...) 
+        # → MiniSidekick.open_in_terminal(..., geometry=...)
+        # import subprocess
 
         win_title = title or "MyCompanion Task"
+        geom = geometry or "180x40"
 
-        # Append read with -r flag to ensure clean execution without extra prompt artifacts
-        pause_suffix = '; echo; read -r -p "Press Enter to exit..."'
-        full_shell_cmd = cmd_str + pause_suffix
-        wrapped_cmd = f"bash -c {shlex.quote(full_shell_cmd)}"
+        # 1. Determine shell persistence strategy
+        if hold_mode == "ask":
+            suffix = ' ; echo ; read -r -p "Press Enter to exit..."'
+        elif hold_mode == "active":
+            suffix = ' ; echo "Please use Ctrl-D to exit" ; exec bash --norc'
+        else:  # "none" or default
+            suffix = ""
 
+        full_shell_cmd = f"{cmd_str}{suffix}"
+
+        # Parse geometry columns & rows for terminals needing explicit flags
+        cols, rows = ( geom.split("x") if "x" in geom else ("180", "40"))
+
+        # 2. Build explicit list of terminal options
         terminals = [
-            ["xterm", "-T", win_title, "-e", wrapped_cmd],
-            ["ghostty", "--title=" + win_title, "-e", wrapped_cmd],
-            ["kitty", "--title", win_title, "bash", "-c", full_shell_cmd],
-            ["x-terminal-emulator", "-T", win_title, "-e", wrapped_cmd],
-            ["gnome-terminal", "--title", win_title, "--", "bash", "-c", full_shell_cmd],
-            ["xfce4-terminal", "-T", win_title, "-e", wrapped_cmd]
+            ("kitty", ["kitty", "-o", f"initial_window_width={cols}c", "-o", f"initial_window_height={rows}c", "--title", win_title, "bash", "-c", full_shell_cmd, ],),
+            ("xterm", [ "xterm", "-geometry", geom, "-T", win_title, "-e", "bash", "-c", full_shell_cmd, ],),
+            ("xfce4-terminal", [ "xfce4-terminal", f"--geometry={geom}", "-T", win_title, "-x", "bash", "-c", full_shell_cmd, ],),
+            ("ghostty", [ "ghostty", f"--title={win_title}", "-e", "bash", "-c", full_shell_cmd, ],),
         ]
 
+        # Handle font overrides if specified in the future
+        if font:
+            # Example font hook for xterm / kitty
+            pass
+
+        # 3. Execution loop
         launched = False
-        for term_args in terminals:
+        for name, term_cmd_l in terminals:
             try:
-                subprocess.Popen(term_args)
+                # dbug(f"Attempting launch with {name}: {term_cmd_l=}")
+                subprocess.Popen(term_cmd_l)
                 launched = True
-                break
+                break  # Exit loop as soon as one binary successfully launches
             except (FileNotFoundError, PermissionError):
+                continue
+            except Exception as err:
+                # dbug(f"Failed launching {name}: {err}")
                 continue
 
         if not launched:
             print("Warning: No compatible terminal emulator found.")
 
+        return launched
 
-    def run_command(self, cmd_str, open_in="window", title=None):
+
+    def run_command(self, cmd_str, open_in="window", title=None, geometry=""):
+        # dbug(f"{cmd_str=} {open_in=}")
         cmd_str = cmd_str.strip()
         if not cmd_str:
             return
@@ -1445,13 +1855,18 @@ class MiniSidekick:
             self.prompt_run_command(initial_cmd=cmd_str)
             return
 
-        if open_in == "terminal":
-            self.open_in_terminal(cmd_str, title=title)
+        if open_in == "raw":
+            self.open_raw(cmd_str)
+
+        elif open_in == "terminal":
+            geom = geometry or self.cfg.get_string("Window", "geometry", "180x40")
+            self.open_in_terminal(cmd_str, title=title, geometry=geom)
 
         elif open_in == "silent":
-            subprocess.Popen(cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.Popen( cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
 
         else:
+            # Standard 'window' mode output capture thread
             def _exec():
                 proc = subprocess.run(cmd_str, shell=True, capture_output=True, text=True)
                 output = proc.stdout if proc.stdout else proc.stderr
@@ -1461,7 +1876,7 @@ class MiniSidekick:
 
             threading.Thread(target=_exec, daemon=True).start()
 
-    
+
     def prompt_run_command(self, event=None, initial_cmd=""):
         win = tk.Toplevel(self.root)
         win.title("Run Command")
@@ -1614,10 +2029,15 @@ class MiniSidekick:
 if __name__ == "__main__":
     args = docopt(__doc__, version=VERSION)
 
+    # Set the global DEBUG flag dynamically from CLI flag
+    if args.get("--debug"):
+        DEBUG = True
+        import inspect  # Only loaded into memory when debugging
+
     start_ai = args.get("--ai", False)
     use_vim = args.get("--vim", False)
 
-    ensure_daemon()
+    ensure_daemon(args)
 
-    app = MiniSidekick(start_with_ai=start_ai, use_vim=use_vim)
+    app = MiniSidekick(start_with_ai=start_ai, use_vim=use_vim, doc_args=args)
     app.run()
