@@ -221,11 +221,12 @@ SYMBOL_MENU_CONFIG = {
         {"label": "🟢 Green Spot (Done)", "symbol": "🟢 "},
         {"label": "🔴 Red Spot (Blocked)", "symbol": "🔴 "},
         {"label": "🟡 Yellow Spot (In Progress)", "symbol": "🟡 "},
-        {"label": "🔍 Inspect / Investigate", "symbol": "🔍 "},
-        {"label": "🤔 Thinking / Query", "symbol": "🤔 "},
-        {"label": "⌛ Pending / Wait", "symbol": "⌛ "},
-        {"label": "⏳ In Progress", "symbol": "⏳ "},
-        {"label": "⌛ Hourglass (Done)", "symbol": "⌛ "},
+        {"label": "🔍 Inspect / Investigate", "symbol": "🔍"},
+        {"label": "🤔 Thinking / Query", "symbol": "🤔"},
+        {"label": "⌛ Pending / Wait", "symbol": "⌛"},
+        {"label": "⏳ In Progress", "symbol": "⏳"},
+        {"label": "⌛ Hourglass (Done)", "symbol": "⌛"},
+        {"label": "🔁 Repeat", "symbol": "🔁"},
         {"label": "📌 Pinned / Important", "symbol": "📌 "},
         {"label": "💡 Idea / Insight", "symbol": "💡 "},
         {"label": "⚠️ Warning", "symbol": "⚠️ "},
@@ -356,6 +357,7 @@ SYMBOL_MENU_CONFIG = {
     "Medical & Laboratory": [
         {"label": "🧪 Test Tube / Sample", "symbol": "🧪 "},
         {"label": "🔬 Microscope / Lab", "symbol": "🔬 "},
+        {"label": "⚗️  Alembic Distillation", "symbol": "⚗️ "},
         {"label": "🧫 Petri Dish / Culture", "symbol": "🧫 "},
         {"label": "🥼 Lab Coat", "symbol": "🥼 "},
         {"label": "💉 Syringe / Injection", "symbol": "💉 "},
@@ -1393,7 +1395,7 @@ class MiniSidekick:
     def __init__(self, start_with_ai=False, doc_args=None, **kwargs):
         # self.cfg = ConfigManager()  # maybe rename cfg to cfg_d later?
         self.cfg = load_cfg_d()
-        dbug(f"{self.cfg=}")
+        # dbug(f"{self.cfg=}")
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
         self.calc_history_file = CALC_NOTES_FILE
@@ -1416,13 +1418,13 @@ class MiniSidekick:
         
         # Check if external editor is configured and bind Ctrl-e
         editor_setting = self.cfg.get("Settings", {}).get("editor", "").strip().lower()
-        dbug(f"[INIT] Editor setting detected: '{editor_setting}'")
+        # dbug(f"[INIT] Editor setting detected: '{editor_setting}'")
 
         if editor_setting:
-            dbug(f"[INIT] Registering global <Control-e> binding for editor '{editor_setting}'...")
+            # dbug(f"[INIT] Registering global <Control-e> binding for editor '{editor_setting}'...")
             self.root.bind_all( "<Control-e>", lambda evt: handle_external_edit(evt, self.root, self.cfg))
-        else:
-            dbug("[INIT] Skipping <Control-e> binding (editor != 'vim')")
+        # else:
+            # dbug("[INIT] Skipping <Control-e> binding (editor != 'vim')")
 
         def handle_exception(exc_type, exc_value, exc_traceback):
             if issubclass(exc_type, KeyboardInterrupt):
@@ -2490,6 +2492,7 @@ class MiniSidekick:
         self.sub_windows.append(win)
         win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
 
+        # 1. Header (Top)
         hdr = tk.Label(
             win, text="Keyboard Shortcuts & Syntax",
             bg=colors["header_bg"], fg=colors["fg"],
@@ -2497,6 +2500,17 @@ class MiniSidekick:
         )
         hdr.pack(side=tk.TOP, fill=tk.X)
 
+        # 2. Control Frame & Close Button (Bottom)
+        ctrl_frame = tk.Frame(win, bg=colors["panel_bg"], pady=6, padx=10)
+        ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
+
+        close_btn = tk.Button(
+            ctrl_frame, text="Close", command=win.destroy,
+            bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=12, pady=3
+        )
+        close_btn.pack(side=tk.RIGHT)
+
+        # 3. Text Widget (Middle - Packed ONCE so it fills remaining space between hdr and ctrl_frame)
         help_text = tk.Text(
             win, wrap=tk.WORD, bg=colors["bg"], fg=colors["fg"],
             insertbackground=colors["insert_bg"], font=("Monospace", 9),
@@ -2510,6 +2524,7 @@ class MiniSidekick:
             "  Ctrl-1..4    : Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)\n"
             "  Ctrl-a       : Toggle Gemini AI bar\n"
             "  Alt-c        : View configuration file\n"
+            "  Ctrl-e       : If [Settings] editor is configured then used editor to open current file\n"
             "  Ctrl-r       : Run command dialog\n"
             "  Ctrl-t       : Open Theme Selector\n"
             "  Ctrl-h / ?   : Show this help window\n"
@@ -2519,36 +2534,41 @@ class MiniSidekick:
             "  https://...                    : Open URL in web browser\n"
             "  [Label](file:///path/to/file)  : Open path in sub-window editor\n"
         )
-
-        # 2. Extract and format CONFIG SHORTCUTS using ConfigManager helper
         content += "\nCONFIG SHORTCUTS:\n"
-        
-        commands = self.cfg.get_custom_commands() if hasattr(self, 'cfg') and self.cfg else []
 
-        if commands:
-            for item in commands:
-                shortcut = item.get("shortcut", "")
-                title = item.get("title") or item.get("command", "")
-                content += f"  {shortcut:<12} : {title}\n"
-        else:
-            content += "  (No custom commands defined in configuration)\n"
+        try:
+            if hasattr(self, 'cfg') and self.cfg:
+                if hasattr(self.cfg, 'get_custom_commands'):
+                    commands = self.cfg.get_custom_commands()
+                elif isinstance(self.cfg, dict):
+                    commands = []
+                else:
+                    commands = []
+            else:
+                commands = []
+
+            if commands:
+                for item in commands:
+                    shortcut = item.get("shortcut", "")
+                    title = item.get("title") or item.get("command", "")
+                    content += f"  {shortcut:<12} : {title}\n"
+            else:
+                content += "  (No custom commands defined in configuration)\n"
+        except Exception as e:
+            dbug(f"ERROR during config shortcut processing: {e}")
 
         content += "\n"
 
-        help_text.insert("1.0", content)
-        help_text.config(state=tk.DISABLED)
-
-        ctrl_frame = tk.Frame(win, bg=colors["panel_bg"], pady=6, padx=10)
-        ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
-        close_btn = tk.Button(
-            ctrl_frame, text="Close", command=win.destroy,
-            bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=12, pady=3
-        )
-        close_btn.pack(side=tk.RIGHT)
+        try:
+            help_text.config(state=tk.NORMAL)
+            help_text.insert("1.0", content)
+            help_text.config(state=tk.DISABLED)
+        except Exception as e:
+            dbug(f"ERROR during text insertion/configuration: {e}")
 
         return "break"
-        # ### EOB def show_help_legend(self, event=None): ### #
+    # ### EOB def show_help_legend(...) ### #
+
 
 
     def open_raw(self, cmd_str):
