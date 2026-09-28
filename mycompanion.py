@@ -4,13 +4,12 @@
      mycompanion.py
 =======================
 Usage:
-    mycompanion.py [--ai] [--vim] [--log] [--debug]
+    mycompanion.py [--ai] [--log] [--debug]
     mycompanion.py (-h | --help)
 
 Options:
     -h --help   Show help and storage paths.
     --ai        Start with AI bar open.
-    --vim       Enable external Vim editing.
     -l --log    Log stdout/stderr to mycompanion.log.
     -d --debug  Enable debug output and run in foreground.
 
@@ -18,7 +17,8 @@ Shortcuts:
     Ctrl-Space  Toggle window visibility
     Ctrl-1..4   Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)
     Ctrl-a      Toggle AI bar
-    Alt-c      View config file
+    Alt-c       View config file
+    Ctrl-e      Edit file using configures [Settings] editor
     Ctrl-r      Run command dialog
     Ctrl-t      Open Theme Selector
     Ctrl-h / ?  Show Shortcuts & Help
@@ -50,6 +50,8 @@ from pathlib import Path
 from docopt import docopt
 import re
 import webbrowser
+import tempfile
+import shlex
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
@@ -101,6 +103,26 @@ THEMES = {
         "nav_bg": "#0a220a", "panel_bg": "#0a220a", "btn_bg": "#143d14",
         "btn_fg": "#00ff00", "insert_bg": "#00ff00"
     },
+    "VT220 Green Phosphor": {
+        "bg": "#121812",        # Dark CRT glass tint (slight green tint in off pixels)
+        "fg": "#40ff40",        # Softer phosphor bloom
+        "header_bg": "#0a0f0a",
+        "nav_bg": "#182218",
+        "panel_bg": "#182218",
+        "btn_bg": "#243524",
+        "btn_fg": "#75ff75",    # Slightly brighter green for highlighted text/buttons
+        "insert_bg": "#40ff40"
+    },
+    "IBM 3270 Amber": {
+        "bg": "#100a00",        # Dark amber-tinted background
+        "fg": "#ffb000",        # Classic warm monochrome amber
+        "header_bg": "#0a0600",
+        "nav_bg": "#1f1400",
+        "panel_bg": "#1f1400",
+        "btn_bg": "#382400",
+        "btn_fg": "#ffd066",
+        "insert_bg": "#ffb000"
+    },
     "Solarized Light": {
         "bg": "#fdf6e3", "fg": "#657b83", "header_bg": "#eee8d5",
         "nav_bg": "#e0d8c3", "panel_bg": "#eee8d5", "btn_bg": "#d3c7a1",
@@ -131,17 +153,448 @@ THEMES = {
         "nav_bg": "#343d46", "panel_bg": "#343d46", "btn_bg": "#4f5b66",
         "btn_fg": "#6699cc", "insert_bg": "#ec5f67"
     },
-    "Amber Phosphor": {
-        "bg": "#120a00", "fg": "#ffb000", "header_bg": "#0a0500",
-        "nav_bg": "#1f1200", "panel_bg": "#1f1200", "btn_bg": "#3d2400",
-        "btn_fg": "#ffc107", "insert_bg": "#ffb000"
-    }
+    "Catppuccin Mocha": {
+        "bg": "#1e1e2e", "fg": "#cdd6f4", "header_bg": "#181825",
+        "nav_bg": "#313244", "panel_bg": "#313244", "btn_bg": "#45475a",
+        "btn_fg": "#89b4fa", "insert_bg": "#f5e0dc"
+    },
+    "Tokyo Night": {
+        "bg": "#1a1b26", "fg": "#a9b1d6", "header_bg": "#16161e",
+        "nav_bg": "#24283b", "panel_bg": "#24283b", "btn_bg": "#414868",
+        "btn_fg": "#7aa2f7", "insert_bg": "#f7768e"
+    },
+    "One Dark Pro": {
+        "bg": "#282c34", "fg": "#abb2bf", "header_bg": "#21252b",
+        "nav_bg": "#3e4451", "panel_bg": "#3e4451", "btn_bg": "#4b5263",
+        "btn_fg": "#61afef", "insert_bg": "#98c379"
+    },
+    "Rose Pine Dark": {
+        "bg": "#191724", "fg": "#e0def4", "header_bg": "#110f19",
+        "nav_bg": "#26233a", "panel_bg": "#26233a", "btn_bg": "#403d52",
+        "btn_fg": "#c4a7e7", "insert_bg": "#ebbcba"
+    },
+    "Synthwave '84": {
+        "bg": "#262335", "fg": "#36f9f6", "header_bg": "#1a1826",
+        "nav_bg": "#34294f", "panel_bg": "#34294f", "btn_bg": "#493566",
+        "btn_fg": "#fe4450", "insert_bg": "#fede5d"
+    },
+    "Cyberpunk Neon": {
+        "bg": "#0d0f18", "fg": "#00f0ff", "header_bg": "#05060a",
+        "nav_bg": "#1a1c2e", "panel_bg": "#1a1c2e", "btn_bg": "#2a2d4a",
+        "btn_fg": "#ff0055", "insert_bg": "#ffe600"
+    },
+    "Everforest Dark": {
+        "bg": "#2d353b", "fg": "#d3c6aa", "header_bg": "#232a2e",
+        "nav_bg": "#3d484d", "panel_bg": "#3d484d", "btn_bg": "#475258",
+        "btn_fg": "#a7c080", "insert_bg": "#e67e80"
+    },
+    "Gruvbox Light": {
+        "bg": "#fbf1c7", "fg": "#3c3836", "header_bg": "#f2e5bc",
+        "nav_bg": "#ebdbb2", "panel_bg": "#ebdbb2", "btn_bg": "#d5c4a1",
+        "btn_fg": "#b57614", "insert_bg": "#9d0006"
+    },
+    "PaperColor Light": {
+        "bg": "#eeeeee", "fg": "#444444", "header_bg": "#e4e4e4",
+        "nav_bg": "#d0d0d0", "panel_bg": "#d0d0d0", "btn_bg": "#bcbcbc",
+        "btn_fg": "#005f87", "insert_bg": "#d7005f"
+    },
 }
 
 DEFAULT_CONFIG = {
     "Window": {"geometry": "640x500"},
-    "Settings": {"ai_mode": "false", "vim_mode": "false"},
+    "Settings": {"ai_mode": "false", "editor": "", "md_editor": " "},
     "Theme": {"name": "Dark / White (Default)"}
+}
+
+# ==============================================================================
+# Symbol Menu Configuration Data
+# ==============================================================================
+
+SYMBOL_MENU_CONFIG = {
+    "Checkboxes": [
+        {"label": "[✓] Completed Task", "symbol": "[✓] "},
+        {"label": "[✘] Eliminated Box", "symbol": "[✘] "},
+        {"label": "[ ] Open Task Box", "symbol": "[ ] "},
+    ],
+    "Status, Time, & Scheduling": [
+        # Status
+        {"label": "🟢 Green Spot (Done)", "symbol": "🟢 "},
+        {"label": "🔴 Red Spot (Blocked)", "symbol": "🔴 "},
+        {"label": "🟡 Yellow Spot (In Progress)", "symbol": "🟡 "},
+        {"label": "⏳ In Progress", "symbol": "⏳ "},
+        {"label": "📌 Pinned / Important", "symbol": "📌 "},
+        {"label": "💡 Idea / Insight", "symbol": "💡 "},
+        {"label": "⚠️ Warning", "symbol": "⚠️ "},
+        {"label": "❓ Red Question Mark", "symbol": "❓ "},
+        {"label": "❔ White Question Mark", "symbol": "❔ "},
+        {"label": "🔍 Inspect / Investigate", "symbol": "🔍 "},
+        {"label": "🤔 Thinking / Query", "symbol": "🤔 "},
+        # Time & Scheduling
+        {"label": "⏰ Alarm Clock", "symbol": "⏰ "},
+        {"label": "⏱️ Stopwatch / Timer", "symbol": "⏱️ "},
+        {"label": "⏲️ Kitchen Timer", "symbol": "⏲️ "},
+        {"label": "⏳ Hourglass (Running)", "symbol": "⏳ "},
+        {"label": "⌛ Hourglass (Done)", "symbol": "⌛ "},
+        {"label": "🕰️ Mantel / Shelf Clock", "symbol": "🕰️ "},
+        {"label": "📅 Calendar (Monthly)", "symbol": "📅 "},
+        {"label": "📆 Tear-off Calendar", "symbol": "📆 "},
+        {"label": "🗓️ Spiral Calendar", "symbol": "🗓️ "},
+        {"label": "🕒 3:00 / Clock Face", "symbol": "🕒 "},
+        {"label": "🕕 6:00 / Clock Face", "symbol": "🕕 "},
+        {"label": "🕘 9:00 / Clock Face", "symbol": "🕘 "},
+        {"label": "🕛 12:00 / Noon-Midnight", "symbol": "🕛 "},
+        {"label": "🔄 Loop / Recurring", "symbol": "🔄 "},
+        {"label": "⌛ Pending / Wait", "symbol": "⌛ "},
+    ],
+    "Bank & Markets": [
+        {"label": "🐂 Bull Market (Wall St)", "symbol": "🐂 "},
+        {"label": "🐻 Bear Market", "symbol": "🐻 "},
+        {"label": "🏦 Bank Building", "symbol": "🏦 "},
+        {"label": "🏛️ Treasury / Institution", "symbol": "🏛️ "},
+        {"label": "📊 Market Analysis / Chart", "symbol": "📊 "},
+        {"label": "💰 Dividend / Cash Flow", "symbol": "💰 "},
+    ],
+    "Construction & Tools": [
+        {"label": "🏗️ Under Construction", "symbol": "🏗️ "},
+        {"label": "🔨 Build / Carpentry", "symbol": "🔨 "},
+        {"label": "🪛 Assembly / Hardware", "symbol": "🪛 "},
+        {"label": "🔧 Repair / Plumbing", "symbol": "🔧 "},
+        {"label": "🪚 Framing / Woodwork", "symbol": "🪚 "},
+        {"label": "🧱 Masonry / Bricks", "symbol": "🧱 "},
+        {"label": "📐 Layout / Measurement", "symbol": "📐 "},
+        {"label": "🚧 Caution / Work Zone", "symbol": "🚧 "},
+    ],
+    "Coastal & Weather": [
+        {"label": "☀️ Sunny / Clear", "symbol": "☀️ "},
+        {"label": "🌧️ Rain / Storm", "symbol": "🌧️ "},
+        {"label": "⛵ Sailboat", "symbol": "⛵ "},
+        {"label": "⚓ Anchor", "symbol": "⚓ "},
+        {"label": "🧭 Compass", "symbol": "🧭 "},
+    ],
+    "Misc Symbols" : [
+        {"label": "🛂 Passport", "symbol": "🛂 "},
+        {"label": "  Notes", "symbol": "  "},
+        {"label": "  Quote", "symbol": "  "},
+        {"label": "  Flag", "symbol": "  "},
+        {"label": "  Book", "symbol": "  "},
+        {"label": "📔 Notebook", "symbol": "📔 "},
+        {"label": "🎇 Sparkler", "symbol": "🎇 "},
+        {"label": "🎉 Party popper", "symbol": "🎉 "},
+        {"label": "✨ Sparkles", "symbol": "✨ "},
+        {"label": "🥳 Party Face", "symbol": "🥳 "},
+        ],
+    "Navigation Symbols": [
+        {"label": "🧭 Compass", "symbol": "🧭 "},
+        {"label": "🗺️ World Map", "symbol": "🗺️ "},
+        {"label": "📍 Location Pin", "symbol": "📍 "},
+        {"label": "📌 Pinned Spot", "symbol": "📌 "},
+        {"label": "🚩 Destination Flag", "symbol": "🚩 "},
+        {"label": "🛣️ Highway / Road", "symbol": "🛣️ "},
+        {"label": "⬆️ Up Arrow", "symbol": "⬆️ "},
+        {"label": "⬇️ Down Arrow", "symbol": "⬇️ "},
+        {"label": "⬅️ Left Arrow", "symbol": "⬅️ "},
+        {"label": "➡️ Right Arrow", "symbol": "➡️ "},
+        {"label": "↗️ Northeast Arrow", "symbol": "↗️ "},
+        {"label": "↘️ Southeast Arrow", "symbol": "↘️ "},
+        {"label": "🔄 Return / Loop", "symbol": "🔄 "},
+        {"label": "↑ Simple Up", "symbol": "↑ "},
+        {"label": "↓ Simple Down", "symbol": "↓ "},
+        {"label": "← Simple Left", "symbol": "← "},
+        {"label": "→ Simple Right", "symbol": "→ "},
+        {"label": "➔ Heavy Right", "symbol": "➔ "},
+        {"label": "↔ Two-Way Arrow", "symbol": "↔ "},
+        ],
+    "Sports" : [
+        {"label": "⚽ Soccer", "symbol": "⚽ "},
+        {"label": "🏈 Football", "symbol": "🏈 "},
+        {"label": "⚾ Baseball", "symbol": "⚾ "},
+        {"label": "🏀 Basketball", "symbol": "🏀 "},
+        {"label": "🎾 Tennis", "symbol": "🎾 "},
+        {"label": "⛳ Golf", "symbol": "⛳ "},
+        {"label": "⛵ Sailing", "symbol": "⛵ "},
+        {"label": "🏆 Trophy", "symbol": "🏆 "},
+        {"label": "  Fitness", "symbol": "  "}
+        ],
+    "Travel" : [
+        {"label": "✈️ Airplane", "symbol": "✈️ "},
+        {"label": "🚂 Train", "symbol": "🚂 "},
+        {"label": "🚇 Subway", "symbol": "🚇 "},
+        {"label": "🚗 Car", "symbol": "🚗 "},
+        {"label": "🚙 SUV", "symbol": "🚙 "},
+        {"label": "🚚 Truck", "symbol": "🚚 "},
+        {"label": "🚲 Bicycle", "symbol": "🚲 "},
+        {"label": "🚌 Bus", "symbol": "🚌 "},
+        {"label": "🚢 Ship", "symbol": "🚢 "},
+        {"label": "⚓ Anchor", "symbol": "⚓ "}
+        ],
+    "Devices" : [
+        {"label": "🖥️ Server", "symbol": "🖥️ "},
+        {"label": "🗄️ Rack / Mainframe", "symbol": "🗄️ "},
+        {"label": "💾 Database / Storage", "symbol": "💾 "},
+        {"label": "☁️ Cloud", "symbol": "☁️ "},
+        {"label": "📱 Phone", "symbol": "📱 "},
+        {"label": "📱 Tablet", "symbol": "📱 "},
+        {"label": "💻 Laptop", "symbol": "💻 "},
+        {"label": "🖥️ Desktop", "symbol": "🖥️ "},
+        {"label": "📺 Display / Monitor", "symbol": "📺 "},
+        {"label": "⌚ Smartwatch", "symbol": "⌚ "},
+        {"label": "📶 Wi-Fi", "symbol": "📶 "},
+        {"label": "📡 Router / Antenna", "symbol": "📡 "},
+        {"label": "🔌 Ethernet / Plug", "symbol": "🔌 "},
+        {"label": "📟 Modem / Pager", "symbol": "📟 "},
+        {"label": "🌐 Network / Web", "symbol": "🌐 "},
+        {"label": "ᛒ Bluetooth", "symbol": "ᛒ "},
+        {"label": "🛰️ Satellite", "symbol": "🛰️ "},
+        {"label": "🌡️ Temperature Sensor", "symbol": "🌡️ "},
+        {"label": "🔋 Battery", "symbol": "🔋 "},
+        {"label": "💡 Smart Light", "symbol": "💡 "},
+        {"label": "🔒 Smart Lock", "symbol": "🔒 "},
+        {"label": "📹 Security Camera", "symbol": "📹 "},
+        {"label": "🎛️ Switch / Controller", "symbol": "🎛️ "},
+        {"label": "🎧 Headphones", "symbol": "🎧 "},
+        {"label": "🔊 Speaker", "symbol": "🔊 "},
+        {"label": "🖨️ Printer", "symbol": "🖨️ "}
+    ],
+    "Medical & Laboratory": [
+        {"label": "🧪 Test Tube / Sample", "symbol": "🧪 "},
+        {"label": "🔬 Microscope / Lab", "symbol": "🔬 "},
+        {"label": "🧫 Petri Dish / Culture", "symbol": "🧫 "},
+        {"label": "🥼 Lab Coat", "symbol": "🥼 "},
+        {"label": "💉 Syringe / Injection", "symbol": "💉 "},
+        {"label": "🩹 Bandage / First Aid", "symbol": "🩹 "},
+        {"label": "🩺 Stethoscope", "symbol": "🩺 "},
+        {"label": "💊 Pill / Medication", "symbol": "💊 "},
+        {"label": "🩸 Blood Drop", "symbol": "🩸 "},
+        {"label": "🏥 Hospital / Clinic", "symbol": "🏥 "},
+        {"label": "🚑 Ambulance", "symbol": "🚑 "},
+        {"label": "⚕️ Medical Symbol", "symbol": "⚕️ "},
+        {"label": "🧬 DNA / Genetics", "symbol": "🧬 "},
+    ],
+    "Figures & Clothing": [
+        {"label": "👤 Person / User", "symbol": "👤 "},
+        {"label": "👥 Group / Team", "symbol": "👥 "},
+        {"label": "👨 Male Figure", "symbol": "👨 "},
+        {"label": "👩 Female Figure", "symbol": "👩 "},
+        {"label": "🚶 Walking Figure", "symbol": "🚶 "},
+        {"label": "👔 Dress Shirt / Tie", "symbol": "👔 "},
+        {"label": "👕 T-Shirt / Casual", "symbol": "👕 "},
+        {"label": "🧥 Jacket / Outerwear", "symbol": "🧥 "},
+        {"label": "👖 Pants / Jeans", "symbol": "👖 "},
+        {"label": "👗 Dress / Outfit", "symbol": "👗 "},
+        {"label": "🧢 Cap / Hat", "symbol": "🧢 "},
+        {"label": "👞 Shoe / Footwear", "symbol": "👞 "},
+        {"label": "👓 Glasses / Eyewear", "symbol": "👓 "},
+    ],
+    "Professions & Roles": [
+        {"label": "👨‍⚕️ Male Doctor / Healthcare", "symbol": "👨‍⚕️ "},
+        {"label": "👩‍⚕️ Female Doctor / Healthcare", "symbol": "👩‍⚕️ "},
+        {"label": "👨‍🔬 Male Scientist / Lab Tech", "symbol": "👨‍🔬 "},
+        {"label": "👩‍🔬 Female Scientist / Lab Tech", "symbol": "👩‍🔬 "},
+        {"label": "👨‍💻 Male Developer / Tech", "symbol": "👨‍💻 "},
+        {"label": "👩‍💻 Female Developer / Tech", "symbol": "👩‍💻 "},
+        {"label": "👨‍🔧 Male Mechanic / Technician", "symbol": "👨‍🔧 "},
+        {"label": "👩‍🔧 Female Mechanic / Technician", "symbol": "👩‍🔧 "},
+        {"label": "👨‍🏭 Male Industrial / Factory", "symbol": "👨‍🏭 "},
+        {"label": "👩‍🏭 Female Industrial / Factory", "symbol": "👩‍🏭 "},
+        {"label": "👨‍💼 Male Executive / Office", "symbol": "👨‍💼 "},
+        {"label": "👩‍💼 Female Executive / Office", "symbol": "👩‍💼 "},
+        {"label": "👨‍🍳 Male Chef / Cook", "symbol": "👨‍🍳 "},
+        {"label": "👩‍🍳 Female Chef / Cook", "symbol": "👩‍🍳 "},
+        {"label": "👨‍✈️ Male Pilot / Aviation", "symbol": "👨‍✈️ "},
+        {"label": "👩‍✈️ Female Pilot / Aviation", "symbol": "👩‍✈️ "},
+        {"label": "👨‍🚒 Male Firefighter", "symbol": "👨‍🚒 "},
+        {"label": "👩‍🚒 Female Firefighter", "symbol": "👩‍🚒 "},
+        {"label": "👮 Police Officer", "symbol": "👮 "},
+        {"label": "🕵️ Detective / Inspector", "symbol": "🕵️ "},
+        {"label": "💂 Guard / Security", "symbol": "💂 "},
+        {"label": "👷 Construction Worker", "symbol": "👷 "},
+    ],
+    "City & Architecture": [
+        {"label": "🏙️ Cityscape / Skyline", "symbol": "🏙️ "},
+        {"label": "🏢 Office Building", "symbol": "🏢 "},
+        {"label": "🏘️ Houses / Neighborhood", "symbol": "🏘️ "},
+        {"label": "🏠 House / Home", "symbol": "🏠 "},
+        {"label": "🏡 House with Garden", "symbol": "🏡 "},
+        {"label": "🏛️ Classical / Civic Building", "symbol": "🏛️ "},
+        {"label": "🏬 Department Store", "symbol": "🏬 "},
+        {"label": "🏭 Factory / Industrial", "symbol": "🏭 "},
+        {"label": "🏗️ Construction / Crane", "symbol": "🏗️ "},
+        {"label": "🏥 Hospital", "symbol": "🏥 "},
+        {"label": "🏦 Bank / Financial", "symbol": "🏦 "},
+        {"label": "🏫 School", "symbol": "🏫 "},
+        {"label": "🏨 Hotel", "symbol": "🏨 "},
+        {"label": "🗽 Statue of Liberty / Monument", "symbol": "🗽 "},
+        {"label": "⛩️ Shinto Shrine / Landmark", "symbol": "⛩️ "},
+        {"label": "🏰 Castle / Historic Site", "symbol": "🏰 "},
+        {"label": "🌉 Bridge / Infrastructure", "symbol": "🌉 "},
+    ],
+    "Special Occasions": [
+        # Holidays
+        {"label": "🎃 Halloween", "symbol": "🎃 "},
+        {"label": "🎄 Christmas tree", "symbol": "🎄 "},
+        {"label": "🎅 Santa Claus", "symbol": "🎅 "},
+        {"label": "🎆 New Year", "symbol": "🎆 "},
+        {"label": "🍀 St. Patrick's", "symbol": "🍀 "},
+        {"label": "🦃 Thanksgiving", "symbol": "🦃 "},
+        # Birthdays & Weddings
+        {"label": "🎂 Birthday cake", "symbol": "🎂 "},
+        {"label": "🎁 Wrapped gift", "symbol": "🎁 "},
+        {"label": "🎈 Balloon", "symbol": "🎈 "},
+        {"label": "💍 Ring / Engagement", "symbol": "💍 "},
+        {"label": "💒 Wedding chapel", "symbol": "💒 "},
+        {"label": "🥂 Clinking glasses", "symbol": "🥂 "},
+        {"label": "🍾 Champagne", "symbol": "🍾 "},
+        # Vacation, Beach & Travel
+        {"label": "🏖️ Beach umbrella", "symbol": "🏖️ "},
+        {"label": "🏝️ Desert island", "symbol": "🏝️ "},
+        {"label": "🌊 Ocean wave", "symbol": "🌊 "},
+        {"label": "🌅 Sunrise / Sunset", "symbol": "🌅 "},
+        {"label": "✈️ Airplane", "symbol": "✈️ "},
+        {"label": "🧳 Luggage", "symbol": "🧳 "},
+        {"label": "🗺️ Map", "symbol": "🗺️ "},
+        {"label": "🚢 Cruise ship", "symbol": "🚢 "},
+        ],
+    "Fractions": [
+        {"label": "½ One Half", "symbol": "½"},
+        {"label": "⅓ One Third", "symbol": "⅓"},
+        {"label": "⅔ Two Thirds", "symbol": "⅔"},
+        {"label": "¼ One Quarter", "symbol": "¼"},
+        {"label": "¾ Three Quarters", "symbol": "¾"},
+        {"label": "⅕ One Fifth", "symbol": "⅕"},
+        {"label": "⅖ Two Fifths", "symbol": "⅖"},
+        {"label": "⅗ Three Fifths", "symbol": "⅗"},
+        {"label": "⅘ Four Fifths", "symbol": "⅘"},
+        {"label": "⅙ One Sixth", "symbol": "⅙"},
+        {"label": "⅝ Five Sixths", "symbol": "⅝"},
+        {"label": "⅛ One Eighth", "symbol": "⅛"},
+        {"label": "⅜ Three Eighths", "symbol": "⅜"},
+        {"label": "⅝ Five Eighths", "symbol": "⅝"},
+        {"label": "⅞ Seven Eighths", "symbol": "⅞"},
+        {"label": "⅐ One Seventh", "symbol": "⅐"},
+        {"label": "⅑ One Ninth", "symbol": "⅑"},
+        {"label": "⅒ One Tenth", "symbol": "⅒"},
+    ],
+    "Basic Operators & Arithmetic": [
+        {"label": "+ Plus", "symbol": "+"},
+        {"label": "− Minus", "symbol": "−"},
+        {"label": "± Plus-Minus", "symbol": "±"},
+        {"label": "∓ Minus-Plus", "symbol": "∓"},
+        {"label": "× Multiplication Sign", "symbol": "×"},
+        {"label": "÷ Division Sign", "symbol": "÷"},
+        {"label": "⋅ Dot Operator / Multiplication", "symbol": "⋅"},
+        {"label": "∗ Asterisk Operator", "symbol": "∗"},
+        {"label": "= Equals", "symbol": "="},
+        {"label": "≠ Not Equal To", "symbol": "≠"},
+        {"label": "≈ Almost Equal To", "symbol": "≈"},
+        {"label": "≅ Congruent / Approx Equal", "symbol": "≅"},
+        {"label": "≡ Identical To / Equivalent", "symbol": "≡"},
+        {"label": "∝ Proportional To", "symbol": "∝"},
+    ],
+    "Relations & Inequalities": [
+        {"label": "< Less Than", "symbol": "<"},
+        {"label": "> Greater Than", "symbol": ">"},
+        {"label": "≤ Less Than or Equal To", "symbol": "≤"},
+        {"label": "≥ Greater Than or Equal To", "symbol": "≥"},
+        {"label": "≪ Much Less Than", "symbol": "≪"},
+        {"label": "≫ Much Greater Than", "symbol": "≫"},
+    ],
+    "Algebra, Geometry & Calculus": [
+        {"label": "° Degree", "symbol": "°"},
+        {"label": "√ Square Root", "symbol": "√"},
+        {"label": "∛ Cube Root", "symbol": "∛"},
+        {"label": "∜ Fourth Root", "symbol": "∜"},
+        {"label": "∞ Infinity", "symbol": "∞"},
+        {"label": "∫ Integral", "symbol": "∫"},
+        {"label": "∬ Double Integral", "symbol": "∬"},
+        {"label": "∭ Triple Integral", "symbol": "∭"},
+        {"label": "∮ Contour Integral", "symbol": "∮"},
+        {"label": "∂ Partial Differential", "symbol": "∂"},
+        {"label": "∇ Nabla / Del", "symbol": "∇"},
+        {"label": "∑ N-ary Summation", "symbol": "∑"},
+        {"label": "∏ N-ary Product", "symbol": "∏"},
+    ],
+    "Set Theory & Logic": [
+        {"label": "∈ Element Of", "symbol": "∈"},
+        {"label": "∉ Not an Element Of", "symbol": "∉"},
+        {"label": "⊂ Subset Of", "symbol": "⊂"},
+        {"label": "⊃ Superset Of", "symbol": "⊃"},
+        {"label": "⊆ Subset of or Equal To", "symbol": "⊆"},
+        {"label": "⊇ Superset of or Equal To", "symbol": "⊇"},
+        {"label": "∪ Union", "symbol": "∪"},
+        {"label": "∩ Intersection", "symbol": "∩"},
+        {"label": "∅ Empty Set", "symbol": "∅"},
+        {"label": "∧ Logical AND", "symbol": "∧"},
+        {"label": "∨ Logical OR", "symbol": "∨"},
+        {"label": "¬ Logical NOT", "symbol": "¬"},
+        {"label": "∀ For All", "symbol": "∀"},
+        {"label": "∃ There Exists", "symbol": "∃"},
+        {"label": "∴ Therefore", "symbol": "∴"},
+        {"label": "∵ Because", "symbol": "∵"},
+    ],
+    "Arrows & Transforms": [
+        {"label": "→ Rightwards Arrow", "symbol": "→"},
+        {"label": "← Leftwards Arrow", "symbol": "←"},
+        {"label": "↔ Left Right Arrow", "symbol": "↔"},
+        {"label": "⇒ Rightwards Double Arrow (Implies)", "symbol": "⇒"},
+        {"label": "⇔ Left Right Double Arrow (Iff)", "symbol": "⇔"},
+    ],
+    "Greek Math Symbols": [
+        {"label": "α Alpha", "symbol": "α"},
+        {"label": "β Beta", "symbol": "β"},
+        {"label": "γ Gamma", "symbol": "γ"},
+        {"label": "δ Delta", "symbol": "δ"},
+        {"label": "ε Epsilon", "symbol": "ε"},
+        {"label": "θ Theta", "symbol": "θ"},
+        {"label": "λ Lambda", "symbol": "λ"},
+        {"label": "μ Mu / Micro", "symbol": "μ"},
+        {"label": "π Pi", "symbol": "π"},
+        {"label": "ρ Rho", "symbol": "ρ"},
+        {"label": "σ Sigma", "symbol": "σ"},
+        {"label": "φ Phi", "symbol": "φ"},
+        {"label": "ω Omega", "symbol": "ω"},
+        {"label": "Δ Capital Delta", "symbol": "Δ"},
+        {"label": "Σ Capital Sigma", "symbol": "Σ"},
+        {"label": "Ω Capital Omega", "symbol": "Ω"},
+    ],
+}
+# EOB SYMBOL_MENU_CONFIG = {
+
+# --- Menu Structure Definitions ---
+
+TOP_LEVEL_CATEGORIES = [
+    "Checkboxes",
+    "Status, Time & Priority",
+]
+
+CATEGORY_GROUPS = {
+    "Math & Science": [
+        "Fractions",
+        "Basic Operators & Arithmetic",
+        "Relations & Inequalities",
+        "Algebra, Geometry & Calculus",
+        "Set Theory & Logic",
+        "Greek Math Symbols",
+        "Arrows & Transforms",
+    ],
+    "Infrastructure & Tools": [
+        "Devices",
+        "Construction & Tools",
+        "Navigation Symbols",
+    ],
+    "Places, Travel & Finance": [
+        "Bank & Markets",
+        "Coastal & Weather",
+        "Travel",
+        "City & Architecture",
+    ],
+    "People & Activities": [
+        "Sports",
+        "Medical & Laboratory",
+        "Figures & Clothing",
+        "Professions & Roles",
+        "Special Occasions",
+        "Misc Symbols",
+    ],
 }
 
 
@@ -151,6 +604,193 @@ def dbug(msg: str) -> None:
         frame = inspect.currentframe().f_back
         lineno = frame.f_lineno
         print(f"[DEBUG L{lineno}] {msg}")
+
+
+def load_cfg_d(filepath=CONFIG_FILE):
+    """
+    Parses an INI file into a pure Python dictionary of dictionaries (cfg_d).
+    Keeps everything native, transparent, and dependency-free.
+    """
+    path = Path(filepath).expanduser()
+    cfg_d = {}
+
+    if not path.exists():
+        return cfg_d
+
+    parser = configparser.ConfigParser(interpolation=None)
+    # Preserve case sensitivity for keys if desired
+    parser.optionxform = str
+    
+    try:
+        parser.read(path, encoding="utf-8")
+        for section in parser.sections():
+            cfg_d[section] = dict(parser.items(section))
+    except Exception as e:
+        print(f"[ERROR] Failed to parse config file '{filepath}': {e}")
+
+    return cfg_d
+
+def save_cfg_d(cfg_d, filepath=CONFIG_FILE):
+    """Flushes a dictionary of dictionaries directly to disk in INI format."""
+    path = Path(filepath).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    parser = configparser.ConfigParser(interpolation=None)
+    parser.optionxform = str
+    for section, keys in cfg_d.items():
+        if isinstance(keys, dict):
+            parser[section] = {str(k): str(v) for k, v in keys.items()}
+    with open(path, "w", encoding="utf-8") as f:
+        parser.write(f)
+
+def cfg_get(cfg_d, section, key, default=""):
+    """Safely retrieves a string value from cfg_d."""
+    if not isinstance(cfg_d, dict):
+        return default
+    return str(cfg_d.get(section, {}).get(key, default)).strip()
+
+def cfg_bool(cfg_d, section, key, default=False):
+    """Safely retrieves a boolean value from cfg_d."""
+    if not isinstance(cfg_d, dict):
+        return default
+    val = cfg_d.get(section, {}).get(key, str(default))
+    return str(val).lower() in ("true", "1", "yes", "on")
+
+def cfg_set(cfg_d, section, key, value):
+    """Sets a value in cfg_d in memory."""
+    if not isinstance(cfg_d, dict):
+        return
+    if section not in cfg_d:
+        cfg_d[section] = {}
+    cfg_d[section][key] = str(value)
+
+def get_custom_commands(cfg_d):
+    """Parses dynamic custom command sections [cmd_*] or [command_*] from cfg_d dictionary."""
+    commands = []
+    if not isinstance(cfg_d, dict):
+        return commands
+
+    VALID_MODES = {
+        "window": "window", "win": "window",
+        "terminal": "terminal", "term": "terminal",
+        "silent": "silent", "quiet": "silent",
+        "raw": "raw", "exec": "raw", "direct": "raw",
+    }
+
+    for section, sec_data in cfg_d.items():
+        if isinstance(sec_data, dict) and section.startswith(("cmd_", "command_")):
+            # Helper for alias keys inside section dict
+            shortcut = sec_data.get("shortcut") or sec_data.get("key") or sec_data.get("bind")
+            cmd_str = sec_data.get("command") or sec_data.get("cmd") or sec_data.get("exec") or sec_data.get("run")
+
+            if not shortcut or not cmd_str:
+                print(f"[WARN] [{section}] missing required shortcut or command key. Skipping.")
+                continue
+
+            raw_mode = str(sec_data.get("mode") or sec_data.get("type") or "window").lower()
+            mode = VALID_MODES.get(raw_mode, "window")
+            title = sec_data.get("title") or sec_data.get("name") or cmd_str
+            geometry = sec_data.get("geometry") or sec_data.get("geom") or sec_data.get("size") or ""
+
+            commands.append({
+                "section": section,
+                "shortcut": shortcut,
+                "command": cmd_str,
+                "mode": mode,
+                "title": title,
+                "geometry": geometry,
+            })
+
+    return commands
+
+# =====================================================================
+# External Editor Helpers (Top-Level Module Scope)
+# =====================================================================
+
+def handle_external_edit(event, root, cfg_d):
+  """Callback for Ctrl-e: identifies active widget and launches external editor."""
+  dbug("[EVENT] <Control-e> triggered!")
+  focused_widget = root.focus_get()
+
+  if isinstance(focused_widget, (tk.Text, tk.Entry)):
+    editor_cmd = cfg_d.get("Settings", {}).get("editor", "").strip()
+    if editor_cmd:
+      # Pass root as the 3rd argument to match open_editor_for_widget
+      open_editor_for_widget(focused_widget, editor_cmd, root)
+      return "break"
+  return None
+
+
+def open_editor_for_widget(widget, editor_cmd, root):
+    """Launches external editor asynchronously without freezing Tkinter."""
+    # 1. Extract content
+    if isinstance(widget, tk.Text):
+        content = widget.get("1.0", tk.END + "-1c")
+    else:
+        content = widget.get()
+
+    # 2. Create temporary file
+    try:
+        tf = tempfile.NamedTemporaryFile(mode="w+", suffix=".txt", delete=False)
+        tf.write(content)
+        tf.flush()
+        temp_path = tf.name
+        tf.close()
+    except Exception as err:
+        messagebox.showerror("File Error", f"Failed to create temp file: {err}")
+        return
+
+    # 3. Build command list
+    try:
+        cmd_args = shlex.split(editor_cmd)
+        cmd_args.append(temp_path)
+    except Exception as err:
+        messagebox.showerror("Command Error", f"Invalid editor command line: {err}")
+        os.remove(temp_path)
+        return
+
+    # 4. Spawn process non-blocking via Popen
+    try:
+        proc = subprocess.Popen(cmd_args)
+    except FileNotFoundError:
+        binary_name = cmd_args[0] if cmd_args else editor_cmd
+        messagebox.showerror("Editor Not Found", f"Executable '{binary_name}' was not found in PATH.")
+        os.remove(temp_path)
+        return
+    except Exception as err:
+        messagebox.showerror("Launch Error", f"Failed to start editor:\n{err}")
+        os.remove(temp_path)
+        return
+
+    # 5. Non-blocking monitor loop
+    def check_editor_status():
+        ret_code = proc.poll()
+        if ret_code is None:
+            # Still running: re-check in 200ms without blocking Tkinter events
+            root.after(200, check_editor_status)
+        else:
+            # Process finished: read back content and clean up
+            try:
+                if ret_code == 0:
+                    with open(temp_path, "r") as f:
+                        new_content = f.read()
+
+                    if isinstance(widget, tk.Text):
+                        widget.delete("1.0", tk.END)
+                        widget.insert("1.0", new_content)
+                    else:
+                        widget.delete(0, tk.END)
+                        widget.insert(0, new_content.rstrip("\r\n"))
+                else:
+                    dbug(f"[EDITOR] Editor exited with non-zero code: {ret_code}")
+            except Exception as read_err:
+                dbug(f"[ERROR] Failed reading temp file back: {read_err}")
+            finally:
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+
+    # Start polling loop
+    check_editor_status()
+
 
 
 # ----------------------------------------------------------------------
@@ -177,7 +817,138 @@ def sanitize_geometry(geom_str, min_w=200, min_h=200, default_w=600, default_h=4
     offsets_str = offsets if offsets else ""
     return f"{w}x{h}{offsets_str}"
 
+def load_symbol_config(filepath="symbols.json"):
+    """Loads symbol menu structure from JSON, falling back to default dict if missing."""
+    if os.path.exists(filepath):
+        try:
+            with open(filepath, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return SYMBOL_MENU_CONFIG
 
+def create_symbol_menu_from_config(
+    parent_window, get_active_widget_func, config=SYMBOL_MENU_CONFIG
+):
+  """Dynamically builds a tk.Menu with prioritized top items and grouped submenus."""
+  main_menu = tk.Menu(parent_window, tearoff=0)
+
+  # Merge 'Status & Emojis' and 'Time & Scheduling' if they exist separately in config
+  working_config = dict(config)
+  if "Status, Time & Priority" not in working_config:
+    status_items = working_config.get("Status & Emojis", [])
+    time_items = working_config.get("Time & Scheduling", [])
+    working_config["Status, Time & Priority"] = status_items + time_items
+
+  def do_insert(symbol):
+    widget = get_active_widget_func()
+    if widget:
+      widget.insert("insert", symbol)
+
+  # 1. Top-Level Priority Items
+  for cat_name in TOP_LEVEL_CATEGORIES:
+    if cat_name in working_config:
+      sub_menu = tk.Menu(main_menu, tearoff=0)
+      for item in working_config[cat_name]:
+        sym = item["symbol"]
+        sub_menu.add_command(
+            label=item["label"], command=lambda s=sym: do_insert(s)
+        )
+      main_menu.add_cascade(label=cat_name, menu=sub_menu)
+
+  main_menu.add_separator()
+
+  # 2. Grouped Category Folders
+  for group_name, cat_list in CATEGORY_GROUPS.items():
+    group_menu = tk.Menu(main_menu, tearoff=0)
+    has_items = False
+
+    for cat_name in cat_list:
+      if cat_name in working_config:
+        cat_menu = tk.Menu(group_menu, tearoff=0)
+        for item in working_config[cat_name]:
+          sym = item["symbol"]
+          cat_menu.add_command(
+              label=item["label"], command=lambda s=sym: do_insert(s)
+          )
+        group_menu.add_cascade(label=cat_name, menu=cat_menu)
+        has_items = True
+
+    if has_items:
+      main_menu.add_cascade(label=f"📁 {group_name}", menu=group_menu)
+
+  # 3. Fallback for any leftover categories
+  ungrouped = [
+      c
+      for c in working_config
+      if c not in TOP_LEVEL_CATEGORIES
+      and c not in ["Status & Emojis", "Time & Scheduling"]
+      and not any(c in g for g in CATEGORY_GROUPS.values())
+  ]
+
+  if ungrouped:
+    other_menu = tk.Menu(main_menu, tearoff=0)
+    for cat_name in ungrouped:
+      cat_menu = tk.Menu(other_menu, tearoff=0)
+      for item in working_config[cat_name]:
+        sym = item["symbol"]
+        cat_menu.add_command(
+            label=item["label"], command=lambda s=sym: do_insert(s)
+        )
+      other_menu.add_cascade(label=cat_name, menu=cat_menu)
+    main_menu.add_cascade(label="📁 Other", menu=other_menu)
+
+  # 4. Standard Clipboard Commands
+  main_menu.add_separator()
+  main_menu.add_command(
+      label="Copy",
+      command=lambda: (
+          get_active_widget_func().event_generate("<<Copy>>")
+          if get_active_widget_func()
+          else None
+      ),
+  )
+  main_menu.add_command(
+      label="Paste",
+      command=lambda: (
+          get_active_widget_func().event_generate("<<Paste>>")
+          if get_active_widget_func()
+          else None
+      ),
+  )
+
+  return main_menu
+
+
+def open_external_markdown_editor(cmd_str, file_path):
+    """
+    Launches an external markdown editor (e.g. 'retext') in a detached background process.
+    Returns True if successfully launched, False otherwise.
+    """
+    if not cmd_str or not cmd_str.strip():
+        return False
+
+    file_path = os.path.abspath(os.path.expanduser(file_path))
+
+    try:
+        if sys.platform == "win32":
+            cmd_list = shlex.split(cmd_str, posix=False)
+            cmd_list.append(file_path)
+            subprocess.Popen(cmd_list, creationflags=subprocess.DETACHED_PROCESS)
+        else:
+            # Linux / macOS
+            cmd_list = shlex.split(cmd_str)
+            cmd_list.append(file_path)
+            subprocess.Popen(cmd_list, start_new_session=True)
+            
+        return True
+    except Exception as e:
+        print(f"[ERROR] Failed to launch external markdown editor '{cmd_str}': {e}")
+        return False
+
+# ----------------------------------------------------------------------
+# ConfigViewerWindow (which hot shortcut buttons)
+# ----------------------------------------------------------------------
 class ConfigViewerWindow(tk.Toplevel):
     def __init__(self, parent, config_path, geometry="850x750", app=None):
         super().__init__(parent)
@@ -367,136 +1138,98 @@ class ConfigViewerWindow(tk.Toplevel):
 # ----------------------------------------------------------------------
 class ConfigManager:
     """Manages application configuration via mycompanion.conf (INI format)."""
+
     def __init__(self, filepath=CONFIG_FILE):
         self.filepath = Path(filepath)
         self.config = configparser.ConfigParser()
-        # if DEBUG:
-            # for section in self.config.sections():
-                # dbug(f"[{section}]")
-                # for key, value in self.config.items(section):
-                    # dbug(f"  {key} = {value}")
-                # print()
-            # pass
         self.load_config()
-        # """--== SEP_LINE ==--""" #
 
     def load_config(self):
+        """Loads configuration from file and populates missing default keys."""
         if not self.filepath.exists():
+            self.filepath.parent.mkdir(parents=True, exist_ok=True)
             self.config.read_dict(DEFAULT_CONFIG)
             self.save_config()
-        else:
-            self.config.read(self.filepath, encoding="utf-8")
-            # if DEBUG:
-            #     # --- DEBUG REPR INSPECTION ---
-            #     for sec in self.config.sections():
-            #         for k, v in self.config.items(sec):
-            #             dbug(f"READ -> [{sec}] {k} = {repr(v)}")
-            #             print("v: " + v)
-            #     # -----------------------------
-            # dbug(f"{self.config.read(self.filepath, encoding='utf-8')=}")
-            for section, keys in DEFAULT_CONFIG.items():
-                # dbug(f"{section=} {keys=}")
-                if not self.config.has_section(section):
-                    self.config.add_section(section)
-                for key, val in keys.items():
-                    if not self.config.has_option(section, key):
-                        self.config.set(section, key, val)
-                        # dbug(f"{section=} {key=} {val=}")
-        # --- SANITIZE GEOMETRY HERE ---
-        # Adjust 'Window' or 'geometry' to match your actual config section/key names
+            return
+
+        # Load existing configuration directly from disk
+        self.config.read(self.filepath, encoding="utf-8")
+
+        # Ensure baseline default sections and keys exist without overwriting user settings
+        for section, keys in DEFAULT_CONFIG.items():
+            if not self.config.has_section(section):
+                self.config.add_section(section)
+            for key, val in keys.items():
+                if not self.config.has_option(section, key):
+                    self.config.set(section, key, str(val))
+
+        # Sanitize Window Geometry if present
         section_name = "Window" if self.config.has_section("Window") else "General"
         if self.config.has_option(section_name, "geometry"):
             raw_geom = self.config.get(section_name, "geometry")
             safe_geom = sanitize_geometry(raw_geom, min_w=200, min_h=200, default_w=600, default_h=400)
             self.config.set(section_name, "geometry", safe_geom)
-        # """--== SEP_LINE ==--""" #
 
     def save_config(self):
+        """Flushes in-memory configuration directly to disk."""
         try:
-            if self.filepath.exists():
-                try:
-                    disk_config = configparser.ConfigParser()
-                    disk_config.read(self.filepath, encoding="utf-8")
-                    for section in self.config.sections():
-                        if not disk_config.has_section(section):
-                            disk_config.add_section(section)
-                        for key, val in self.config.items(section):
-                            # dbug(f"{key=} {val=}")
-                            disk_config.set(section, key, val)
-                    self.config = disk_config
-                except Exception as e:
-                    print(f"Config load error: {e}")
+            self.filepath.parent.mkdir(parents=True, exist_ok=True)
             with open(self.filepath, "w", encoding="utf-8") as f:
                 self.config.write(f)
         except Exception as e:
-            print(f"Failed to save config: {e}")
-        # """--== SEP_LINE ==--""" #
+            print(f"[ERROR] Failed to save config: {e}")
+
+    def get_string(self, section, key, default=""):
+        """Retrieves any string value from any section."""
+        if self.config.has_section(section) and self.config.has_option(section, key):
+            return self.config.get(section, key, fallback=default).strip()
+        return default
+
     def get_bool(self, section, key, default=False):
-        # dbug(f"{section=} {key=}")
+        """Retrieves any boolean value from any section."""
         try:
             return self.config.getboolean(section, key)
         except Exception:
             return default
-        # """--== SEP_LINE ==--""" #
-    def get_string(self, section, key, default=""):
-        return self.config.get(section, key, fallback=default)
-        # dbug(f"{section=} {key=}")
-        # """--== SEP_LINE ==--""" #
+
     def set_value(self, section, key, value):
+        """Sets a value dynamically in memory and flushes immediately to disk."""
         if not self.config.has_section(section):
             self.config.add_section(section)
         self.config.set(section, key, str(value))
-        # dbug(f"{section=} {key=} {str(value)=}")
         self.save_config()
-        # """--== SEP_LINE ==--""" #
+
     def _get_flexible(self, section_proxy, keys, default=""):
-        """ 
-        Utility to retrieve the first matching key from a list of alias keys. 
-        """
+        """Utility to retrieve the first matching key from a list of alias keys."""
         for k in keys:
             if k in section_proxy:
-                # dbug(f"{k=}")
                 return section_proxy.get(k, "").strip()
         return default
-        # """--== SEP_LINE ==--""" #
+
     def get_custom_commands(self):
+        """Parses dynamic custom command sections [cmd_*] or [command_*]."""
         commands = []
-        # Alias map for normalized execution modes
         VALID_MODES = {
-            "window": "window",
-            "win": "window",
-            "terminal": "terminal",
-            "term": "terminal",
-            "silent": "silent",
-            "quiet": "silent",
-            "raw": "raw",
-            "exec": "raw",
-            "direct": "raw",
+            "window": "window", "win": "window",
+            "terminal": "terminal", "term": "terminal",
+            "silent": "silent", "quiet": "silent",
+            "raw": "raw", "exec": "raw", "direct": "raw",
         }
         for section in self.config.sections():
-            if section.startswith("cmd_") or section.startswith("command_"):
+            if section.startswith(("cmd_", "command_")):
                 sec = self.config[section]
-                # """--== SEP_LINE ==--""" #
-                # Key Aliases
                 shortcut = self._get_flexible(sec, ["shortcut", "key", "bind"])
                 cmd_str = self._get_flexible(sec, ["command", "cmd", "exec", "run"])
-                # dbug(f"{cmd_str=} {sec=}")
-                # """--== SEP_LINE ==--""" #
+
                 if not shortcut or not cmd_str:
                     print(f"Warning: [{section}] missing required shortcut or command key. Skipping.")
                     continue
-                    # """--== SEP_LINE ==--""" #
-                # Mode resolution and validation
+
                 raw_mode = self._get_flexible(sec, ["mode", "type"], default="window").lower()
-                if raw_mode in VALID_MODES:
-                    mode = VALID_MODES[raw_mode]
-                else:
-                    print(f"Warning: [{section}] unrecognized mode '{raw_mode}'. Defaulting to 'window'.")
-                    mode = "window"
-                    # """--== SEP_LINE ==--""" #
+                mode = VALID_MODES.get(raw_mode, "window")
                 title = self._get_flexible(sec, ["title", "name"], default=cmd_str)
                 geometry = self._get_flexible(sec, ["geometry", "geom", "size"])
-                # """--== SEP_LINE ==--""" #
+
                 commands.append({
                     "section": section,
                     "shortcut": shortcut,
@@ -580,6 +1313,7 @@ def print_help_and_paths():
     print("----------------------------------------")
 
 
+
 def ensure_daemon(doc_args):
     global DEBUG
     script_path = os.path.abspath(__file__)
@@ -654,81 +1388,21 @@ def ensure_daemon(doc_args):
     # ### EOB def ensure_daemon(): ### #
 
 
-# def ensure_daemon(doc_args):
-#     script_path = os.path.abspath(__file__)
-#     python_exec = sys.executable
-# 
-#     # Check lockfile
-#     if os.path.exists(LOCK_FILE):
-#         try:
-#             with open(LOCK_FILE, "r", encoding="utf-8") as f:
-#                 old_pid = int(f.read().strip())
-#             os.kill(old_pid, 0)
-#             print(f"MyCompanion is already running (PID {old_pid}).")
-#             print("Use Ctrl-space to toggle the window.")
-#             print(f"Lock file location: {LOCK_FILE}")
-#             sys.exit(0)
-#         except (ProcessLookupError, ValueError):
-#             try:
-#                 os.remove(LOCK_FILE)
-#             except OSError:
-#                 pass
-#         except PermissionError:
-#             sys.exit(0)
-# 
-#     # Parent CLI launcher process
-#     if os.environ.get("SIDEKICK_DAEMON") != "1":
-#         if DEBUG:
-#             os.environ["SIDEKICK_DAEMON"] = "1"
-#             return
-# 
-#         print_help_and_paths()
-# 
-#         new_env = os.environ.copy()
-#         new_env["SIDEKICK_DAEMON"] = "1"
-# 
-#         args_list = [python_exec, script_path] + sys.argv[1:]
-# 
-#         popen_kwargs = {
-#             "env": new_env,
-#             "start_new_session": True,
-#             "stdin": subprocess.DEVNULL,
-#         }
-# 
-#         # Check docopt parsed arguments for --log
-#         if doc_args.get("--log"):
-#             log_fp = open(LOG_FILE, "a", encoding="utf-8")
-#             popen_kwargs["stdout"] = log_fp
-#             popen_kwargs["stderr"] = log_fp
-#         elif DEBUG:
-#             pass  # Leave terminal streams open for debugging
-#         else:
-#             popen_kwargs["stdout"] = subprocess.DEVNULL
-#             popen_kwargs["stderr"] = subprocess.DEVNULL
-# 
-#         subprocess.Popen(args_list, **popen_kwargs)
-#         sys.exit(0)
-#     else:
-#         # Child daemon process
-#         with open(LOCK_FILE, "w", encoding="utf-8") as f:
-#             f.write(str(os.getpid()))
-#     # ### EOB def ensure_daemon(): ### #
-
-
 # ----------------------------------------------------------------------
 # MiniSidekick Class
 # ----------------------------------------------------------------------
 class MiniSidekick:
-    def __init__(self, start_with_ai=False, use_vim=False, doc_args=None, **kwargs):
-        self.cfg = ConfigManager()
+    def __init__(self, start_with_ai=False, doc_args=None, **kwargs):
+        # self.cfg = ConfigManager()  # maybe rename cfg to cfg_d later?
+        self.cfg = load_cfg_d()
+        dbug(f"{self.cfg=}")
         self.note_file = NOTES_FILE
         self.cal_notes_file = CAL_NOTES_FILE
         self.calc_history_file = CALC_NOTES_FILE
         self.todo_file = TODO_FILE
 
-        self.use_vim = use_vim or self.cfg.get_bool("Settings", "vim_mode", False)
-        # self.enable_ai = start_with_ai
-        self.enable_ai = start_with_ai or self.cfg.get_bool("Settings", "ai_mode", False)
+        ai_cfg = self.cfg.get("Settings", {}).get("ai_mode", "false")
+        self.enable_ai = start_with_ai or (str(ai_cfg).lower() in ("true", "1", "yes"))
 
         if self.enable_ai:
             if not os.environ.get("GEMINI_API_KEY"):
@@ -742,6 +1416,16 @@ class MiniSidekick:
 
         self.root = tk.Tk()
         
+        # Check if external editor is configured and bind Ctrl-e
+        editor_setting = self.cfg.get("Settings", {}).get("editor", "").strip().lower()
+        dbug(f"[INIT] Editor setting detected: '{editor_setting}'")
+
+        if editor_setting:
+            dbug(f"[INIT] Registering global <Control-e> binding for editor '{editor_setting}'...")
+            self.root.bind_all( "<Control-e>", lambda evt: handle_external_edit(evt, self.root, self.cfg))
+        else:
+            dbug("[INIT] Skipping <Control-e> binding (editor != 'vim')")
+
         def handle_exception(exc_type, exc_value, exc_traceback):
             if issubclass(exc_type, KeyboardInterrupt):
                 sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -756,7 +1440,8 @@ class MiniSidekick:
 
         self.root.title(os.path.basename(__file__))
 
-        saved_geometry = self.cfg.get_string("Window", "geometry", "640x500")
+        # saved_geometry = cfg_get(self.cfg, "Window", "geometry", "640x500")
+        saved_geometry = self.cfg.get("Window", {}).get("geometry", "640x500")
         self.root.geometry(saved_geometry)
         self.root.attributes("-topmost", True)
         self.root.withdraw()
@@ -838,14 +1523,14 @@ class MiniSidekick:
         self.notes_lbl_widget = tk.Label(self.notes_ctrl_frame, text=lbl_notes, font=("Monospace", 9, "bold"))
         self.notes_lbl_widget.pack(side=tk.LEFT)
 
+        # Insert Menu button
+        tk.Button( self.notes_ctrl_frame, text="Insert Menu", command=self.show_insert_menu, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0)) 
+
         tk.Button(self.notes_ctrl_frame, text="Save Selected As", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
         # tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         if self.enable_ai:
             tk.Button(self.notes_ctrl_frame, text="AI (Ctrl-a)", command=self.toggle_ai_bar, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
-
-        if self.use_vim:
-            tk.Button(self.notes_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.note_file, self.text_area), bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
 
         self.text_area = tk.Text(
             self.notes_frame, wrap=tk.WORD, font=("Monospace", 11), bd=0, padx=10, pady=10
@@ -853,9 +1538,6 @@ class MiniSidekick:
         self.text_area.pack(fill=tk.BOTH, expand=True)
         self.text_area.bind("<KeyRelease>", lambda e: self.apply_link_parsing(self.text_area))
         self.load_notes()
-
-        if self.use_vim:
-            self.text_area.config(state=tk.DISABLED)
 
         # --- VIEW 2: CALCULATOR ---
         self.calc_frame = tk.Frame(self.content_frame)
@@ -879,10 +1561,10 @@ class MiniSidekick:
         self.calc_history_lbl = tk.Label(self.calc_history_header, text="Calculation History:", font=("Monospace", 10, "bold"), fg="#888", anchor="w")
         self.calc_history_lbl.pack(side=tk.LEFT)
 
-        tk.Button(self.calc_history_header, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        # Insert Menu button
+        tk.Button( self.calc_history_header, text="Insert Menu", command=self.show_insert_menu, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0)) 
 
-        if self.use_vim:
-            tk.Button(self.calc_history_header, text="Edit in Vim", command=lambda: self.open_in_vim(self.calc_history_file, self.calc_history_text), bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
+        tk.Button(self.calc_history_header, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         self.calc_history_text = tk.Text(
             self.calc_frame, wrap=tk.WORD, font=("Monospace", 10), bd=0, padx=10, pady=10
@@ -890,9 +1572,6 @@ class MiniSidekick:
         self.calc_history_text.pack(fill=tk.BOTH, expand=True, padx=15, pady=(0, 15))
         self.calc_history_text.bind("<KeyRelease>", lambda e: self.apply_link_parsing(self.calc_history_text))
         self.load_calc_history()
-
-        if self.use_vim:
-            self.calc_history_text.config(state=tk.DISABLED)
 
         # --- VIEW 3: CALENDAR ---
         self.cal_frame = tk.Frame(self.content_frame)
@@ -909,10 +1588,10 @@ class MiniSidekick:
         self.cal_notes_label = tk.Label(self.cal_notes_header_frame, text="Calendar Notes:", font=("Monospace", 10, "bold"), anchor="w")
         self.cal_notes_label.pack(side=tk.LEFT)
 
-        tk.Button(self.cal_notes_header_frame, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        # --- add Insert Menu button --- #
+        tk.Button( self.cal_notes_header_frame, text="Insert Menu", command=self.show_insert_menu, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0)) 
 
-        if self.use_vim:
-            tk.Button(self.cal_notes_header_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.cal_notes_file, self.cal_notes_text), bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
+        tk.Button(self.cal_notes_header_frame, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         self.cal_notes_text = tk.Text(
             self.cal_frame, wrap=tk.WORD, font=("Monospace", 10), bd=0, padx=10, pady=5
@@ -920,9 +1599,6 @@ class MiniSidekick:
         self.cal_notes_text.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=15, pady=10)
         self.cal_notes_text.bind("<KeyRelease>", lambda e: self.apply_link_parsing(self.cal_notes_text))
         self.load_cal_notes()
-
-        if self.use_vim:
-            self.cal_notes_text.config(state=tk.DISABLED)
 
         # --- VIEW 4: TODO ---
         self.todo_frame = tk.Frame(self.content_frame)
@@ -933,10 +1609,10 @@ class MiniSidekick:
         self.todo_lbl_widget = tk.Label(self.todo_ctrl_frame, text=lbl_todo, font=("Monospace", 9, "bold"))
         self.todo_lbl_widget.pack(side=tk.LEFT)
 
-        tk.Button(self.todo_ctrl_frame, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
+        # Insert Menu button
+        tk.Button( self.todo_ctrl_frame, text="Insert Menu", command=self.show_insert_menu, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0)) 
 
-        if self.use_vim:
-            tk.Button(self.todo_ctrl_frame, text="Edit in Vim", command=lambda: self.open_in_vim(self.todo_file, self.todo_text_area), bd=0, padx=8, pady=2).pack(side=tk.RIGHT)
+        tk.Button(self.todo_ctrl_frame, text="Save Select As...", command=self.save_selected_as, bd=0, padx=8, pady=2).pack(side=tk.RIGHT, padx=(5, 0))
 
         self.todo_text_area = tk.Text(
             self.todo_frame, wrap=tk.WORD, font=("Monospace", 11), bd=0, padx=10, pady=10
@@ -944,9 +1620,6 @@ class MiniSidekick:
         self.todo_text_area.pack(fill=tk.BOTH, expand=True)
         self.todo_text_area.bind("<KeyRelease>", lambda e: self.apply_link_parsing(self.todo_text_area))
         self.load_todo()
-
-        if self.use_vim:
-            self.todo_text_area.config(state=tk.DISABLED)
 
         self.ai_visible = False
         if self.enable_ai:
@@ -974,7 +1647,7 @@ class MiniSidekick:
         self.root.bind("<Control-a>", lambda e: self.toggle_ai_bar())
         self.root.bind("<Control-A>", lambda e: self.toggle_ai_bar())
         self.root.bind("<Alt-c>",     lambda e: self.view_config_file())
-        self.root.bind("<Control-E>", lambda e: self.edit_config_file())
+        # self.root.bind("<Control-E>", lambda e: self.edit_config_file())
         self.root.bind("<Control-t>", lambda e: self.open_theme_selector())
         self.root.bind("<Control-T>", lambda e: self.open_theme_selector())
         self.root.bind("<Control-q>", lambda event: self.quit_app())
@@ -987,6 +1660,7 @@ class MiniSidekick:
         self.root.bind("<Control-r>", lambda e: self.prompt_run_command())
         self.root.bind("<Control-R>", lambda e: self.prompt_run_command())
 
+        # ---- custom commands setup ---- #
         self.bind_custom_commands()
 
         self.is_visible = False
@@ -996,8 +1670,36 @@ class MiniSidekick:
         self.apply_theme(self.current_theme_name)
 
 
+    def get_active_text_widget(self):
+        """Returns whichever text widget belongs to the current view."""
+        if self.current_view == "notes":
+            return self.text_area
+        elif self.current_view == "todo":
+            return self.todo_text_area
+        elif self.current_view == "cal":
+            return self.cal_notes_text
+        elif self.current_view == "calc":
+            return self.calc_history_text
+        return None
+
+
+    def show_insert_menu(self, event=None):
+        """Displays the configured symbol menu directly below the active text area."""
+        widget = self.get_active_text_widget()
+        if not widget:
+            return "break"
+        # Call your base-level builder function passing root and the active widget lookup helper
+        menu = create_symbol_menu_from_config(self.root, self.get_active_text_widget)
+        # Post the menu at current mouse coordinates
+        x = self.root.winfo_pointerx()
+        y = self.root.winfo_pointery()
+        menu.tk_popup(x, y)
+        return "break"
+
+
     def bind_custom_commands(self):
-        custom_cmds = self.cfg.get_custom_commands()
+        # custom_cmds = self.cfg.get_custom_commands()
+        custom_cmds = get_custom_commands(self.cfg)
         for item in custom_cmds:
             raw_shortcut = item["shortcut"]
             cmd_str = item["command"]
@@ -1027,11 +1729,12 @@ class MiniSidekick:
         return "break"
 
     def load_saved_theme(self):
-        theme_name = self.cfg.get_string("Theme", "name", "Dark / White (Default)")
+        # theme_name = cfg_get(self.cfg, "Theme", "name", "Dark / White (Default)")
+        theme_name = self.cfg.get("Theme", {}).get("name", "Dark / White (Default)").strip()
         return theme_name if theme_name in THEMES else "Dark / White (Default)"
 
     def save_theme(self, theme_name):
-        self.cfg.set_value("Theme", "name", theme_name)
+        cfg_set(self.cfg, "Theme", "name", theme_name)
 
     def apply_theme(self, theme_name):
         self.current_theme_name = theme_name
@@ -1096,26 +1799,65 @@ class MiniSidekick:
         style_children(self.cal_notes_header_frame)
         style_children(self.todo_ctrl_frame)
 
+
     def open_theme_selector(self, event=None):
         win = tk.Toplevel(self.root)
         win.title("Select Theme")
-        win.geometry("320x250")
+        win.geometry("340x420")  # Made taller (420px height)
         win.attributes("-topmost", True)
 
         colors = THEMES[self.current_theme_name]
         win.config(bg=colors["bg"])
 
-        lbl = tk.Label(win, text="Choose Application Theme:", bg=colors["bg"], fg=colors["fg"], font=("Monospace", 10, "bold"))
+        lbl = tk.Label(
+            win,
+            text="Choose Application Theme:",
+            bg=colors["bg"],
+            fg=colors["fg"],
+            font=("Monospace", 10, "bold"),
+        )
         lbl.pack(pady=(10, 5))
 
-        listbox = tk.Listbox(
-            win, bg=colors["panel_bg"], fg=colors["fg"],
-            selectbackground=colors["btn_bg"], font=("Monospace", 10), bd=0, relief=tk.FLAT
+        # Container frame for listbox + scrollbar
+        list_frame = tk.Frame(win, bg=colors["bg"])
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+
+        scrollbar = tk.Scrollbar(
+            list_frame,
+            orient=tk.VERTICAL,
+            bg=colors["panel_bg"],
+            activebackground=colors["btn_bg"],
+            troughcolor=colors["bg"],
+            bd=0,
+            highlightthickness=0,
+            relief=tk.FLAT,
         )
-        listbox.pack(fill=tk.BOTH, expand=True, padx=15, pady=5)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        listbox = tk.Listbox(
+            list_frame,
+            bg=colors["panel_bg"],
+            fg=colors["fg"],
+            selectbackground=colors["btn_bg"],
+            selectforeground=colors["btn_fg"],
+            font=("Monospace", 10),
+            bd=0,
+            highlightthickness=0,
+            relief=tk.FLAT,
+            yscrollcommand=scrollbar.set,
+        )
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        scrollbar.config(command=listbox.yview)
 
         for theme in THEMES.keys():
             listbox.insert(tk.END, theme)
+
+        # Highlight currently active theme in the listbox
+        if self.current_theme_name in THEMES:
+            idx = list(THEMES.keys()).index(self.current_theme_name)
+            listbox.selection_set(idx)
+            listbox.see(idx)
 
         def on_select(evt):
             sel = listbox.curselection()
@@ -1123,17 +1865,43 @@ class MiniSidekick:
                 chosen = listbox.get(sel[0])
                 self.apply_theme(chosen)
                 colors_new = THEMES[chosen]
+
+                # Update dialog components with new colors
                 win.config(bg=colors_new["bg"])
                 lbl.config(bg=colors_new["bg"], fg=colors_new["fg"])
-                listbox.config(bg=colors_new["panel_bg"], fg=colors_new["fg"], selectbackground=colors_new["btn_bg"])
-                close_btn.config(bg=colors_new["btn_bg"], fg=colors_new["btn_fg"])
+                list_frame.config(bg=colors_new["bg"])
+                listbox.config(
+                    bg=colors_new["panel_bg"],
+                    fg=colors_new["fg"],
+                    selectbackground=colors_new["btn_bg"],
+                    selectforeground=colors_new["btn_fg"],
+                )
+                scrollbar.config(
+                    bg=colors_new["panel_bg"],
+                    activebackground=colors_new["btn_bg"],
+                    troughcolor=colors_new["bg"],
+                )
+                close_btn.config(
+                    bg=colors_new["btn_bg"], fg=colors_new["btn_fg"]
+                )
 
         listbox.bind("<<ListboxSelect>>", on_select)
 
-        close_btn = tk.Button(win, text="Close", command=win.destroy, bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=10, pady=4)
+        close_btn = tk.Button(
+            win,
+            text="Close",
+            command=win.destroy,
+            bg=colors["btn_bg"],
+            fg=colors["btn_fg"],
+            bd=0,
+            padx=10,
+            pady=4,
+            relief=tk.FLAT,
+        )
         close_btn.pack(pady=10)
 
         return "break"
+
 
     def apply_link_parsing(self, text_widget):
         for tag in text_widget.tag_names():
@@ -1142,6 +1910,7 @@ class MiniSidekick:
 
         content = text_widget.get("1.0", tk.END)
 
+        # HTTP / HTTPS Links
         for idx, match in enumerate(re.finditer(r"https?://[^\s>\"']+", content)):
             tag_name = f"ext_{idx}"
             start = f"1.0 + {match.start()} chars"
@@ -1154,6 +1923,7 @@ class MiniSidekick:
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
+        # File Links - Route through open_or_create_file instead of open_file_subwindow
         for idx, match in enumerate(re.finditer(r"\[(.*?)\]\((file://.*?)\)", content)):
             tag_name = f"file_{idx}"
             start = f"1.0 + {match.start()} chars"
@@ -1162,24 +1932,37 @@ class MiniSidekick:
 
             text_widget.tag_config(tag_name, foreground="#10B981", underline=True)
             text_widget.tag_add(tag_name, start, end)
-            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, p=file_path: self.open_file_subwindow(p))
+            # Point to self.open_or_create_file here:
+            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, p=file_path: self.open_or_create_file(p))
             text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
+
     def open_or_create_file(self, file_path):
-        path = Path(file_path)
+        path = Path(file_path).expanduser().resolve()
+        
+        # 1. Handle missing file creation safely upfront
         try:
             if not path.exists():
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.touch()
-            subprocess.run(["xdg-open", str(path)])
         except Exception as err:
-            messagebox.showerror("File Error", f"Could not open/create file:\n{err}")
+            messagebox.showerror("File Error", f"Could not create file:\n{err}")
+            return
 
+        # 2. Route Markdown files to external editor if configured
+        if path.suffix.lower() in [".md", ".markdown"]:
+            md_editor = cfg_get(self.cfg, "Settings", "md_editor")
+            if md_editor:
+                # dbug(f"{md_editor=}")
+                self.open_raw(f"{md_editor} {path}")
+                return  # Skip internal editor window completely!
+        
+        # 3. Default fallback for non-md files or when md_editor is blank
+        self.open_file_subwindow(path)
 
     def open_file_subwindow(self, file_path, read_only=False):
         path = Path(file_path)
-
         try:
             if not path.exists():
                 path.parent.mkdir(parents=True, exist_ok=True)
@@ -1190,7 +1973,7 @@ class MiniSidekick:
 
         win = tk.Toplevel(self.root)
         win.title(f"{'[READ-ONLY] ' if read_only else ''}{path.name}")
-        win.geometry("600x450")
+        win.geometry("600x550")
         win.attributes("-topmost", True)
 
         colors = THEMES[self.current_theme_name]
@@ -1198,31 +1981,14 @@ class MiniSidekick:
         self.sub_windows.append(win)
         win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
 
+        # Top Bar containing Path Header
         top_bar = tk.Frame(win, bg=colors["panel_bg"], pady=4, padx=10)
         top_bar.pack(side=tk.TOP, fill=tk.X)
 
         path_label = tk.Label(top_bar, text=str(path), bg=colors["panel_bg"], fg=colors["fg"], font=("Monospace", 9, "bold"), anchor="w")
         path_label.pack(side=tk.LEFT, expand=True, fill=tk.X)
 
-        # Only show the Delete button if the file is opened for editing
-        if not read_only:
-            def delete_file():
-                confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {path.name}?", parent=win)
-                if confirm:
-                    try:
-                        if path.exists():
-                            path.unlink()
-                        win.destroy()
-                    except Exception as err:
-                        messagebox.showerror("Delete Error", f"Could not delete file:\n{err}", parent=win)
-
-            delete_btn = tk.Button(
-                top_bar, text="Delete Note", command=delete_file,
-                bg="#8b0000", fg="#fff", activebackground="#a00000", activeforeground="#fff",
-                bd=0, padx=8, pady=2, font=("Monospace", 8, "bold")
-            )
-            delete_btn.pack(side=tk.RIGHT)
-
+        # Main Text Editor Area
         editor = tk.Text(
             win, wrap=tk.WORD, bg=colors["bg"], fg=colors["fg"],
             insertbackground=colors["insert_bg"], font=("Monospace", 11),
@@ -1236,30 +2002,30 @@ class MiniSidekick:
         except Exception as err:
             messagebox.showerror("File Error", f"Could not read file:\n{err}")
 
-        # Parse clickable links / syntax highlighting if applicable
+        # Link Parsing / Highlighting
         if not read_only:
             editor.bind("<KeyRelease>", lambda e: self.apply_link_parsing(editor))
         self.apply_link_parsing(editor)
 
-        # Disable editing if read_only is True (placed after content insertion and parsing)
+        # Disable editing if read_only is True
         if read_only:
             editor.config(state="disabled")
 
+        # Bottom Control Frame (Status + Action Buttons)
         ctrl_frame = tk.Frame(win, bg=colors["panel_bg"], pady=6, padx=10)
         ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
 
         status_lbl = tk.Label(
-            ctrl_frame, 
-            text="Read-Only Mode" if read_only else "", 
-            bg=colors["panel_bg"], 
-            fg="#4ec9b0", 
+            ctrl_frame,
+            text="Read-Only Mode" if read_only else "",
+            bg=colors["panel_bg"],
+            fg="#4ec9b0",
             font=("Monospace", 9)
         )
         status_lbl.pack(side=tk.LEFT, padx=5)
 
-
         def save_file(event=None):
-            if not path.exists():
+            if read_only or not path.exists():
                 return "break"
             try:
                 content = editor.get("1.0", tk.END).strip()
@@ -1271,12 +2037,38 @@ class MiniSidekick:
                 messagebox.showerror("Save Error", f"Could not save file:\n{err}")
             return "break"
 
-        win.protocol("WM_DELETE_WINDOW", lambda: (save_file(), win.destroy()))
+        win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
         editor.bind("<Control-s>", save_file)
         editor.bind("<Control-S>", save_file)
 
-        save_btn = tk.Button(ctrl_frame, text="Save (Ctrl-S)", command=save_file, bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=10, pady=3)
-        save_btn.pack(side=tk.RIGHT, padx=5)
+        # Bottom Right Action Buttons
+        if not read_only:
+            save_btn = tk.Button(
+                ctrl_frame, text="Save (Ctrl-S)", command=save_file, 
+                bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=10, pady=3
+            )
+            save_btn.pack(side=tk.RIGHT, padx=5)
+
+            def delete_file():
+                confirm = messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {path.name}?", parent=win)
+                if confirm:
+                    try:
+                        if path.exists():
+                            path.unlink()
+                        if win in self.sub_windows:
+                            self.sub_windows.remove(win)
+                        win.destroy()
+                    except Exception as err:
+                        messagebox.showerror("Delete Error", f"Could not delete file:\n{err}", parent=win)
+
+            delete_btn = tk.Button(
+                ctrl_frame, text="Delete Note", command=delete_file,
+                bg="#8b0000", fg="#fff", activebackground="#a00000", activeforeground="#fff",
+                bd=0, padx=10, pady=3, font=("Monospace", 8, "bold")
+            )
+            delete_btn.pack(side=tk.RIGHT, padx=5)
+    # ### EOB def open_file_subwindow(self, file_path, read_only=False): ### #
+
 
     def save_selected_as(self, event=None):
         widget = None
@@ -1384,8 +2176,6 @@ class MiniSidekick:
                 text_widget.insert("1.0", f.read())
         self.apply_link_parsing(text_widget)
 
-        if self.use_vim:
-            text_widget.config(state=tk.DISABLED)
 
     def handle_tab_shortcut(self, view_name):
         self.switch_view(view_name)
@@ -1613,18 +2403,15 @@ class MiniSidekick:
         self.apply_link_parsing(self.todo_text_area)
 
     def save_notes(self):
-        if not self.use_vim:
-            with open(self.note_file, "w", encoding="utf-8") as f:
-                f.write(self.text_area.get("1.0", tk.END).strip())
-            with open(self.cal_notes_file, "w", encoding="utf-8") as f:
-                f.write(self.cal_notes_text.get("1.0", tk.END).strip())
-            with open(self.todo_file, "w", encoding="utf-8") as f:
-                f.write(self.todo_text_area.get("1.0", tk.END).strip())
-            with open(self.calc_history_file, "w", encoding="utf-8") as f:
-                f.write(self.calc_history_text.get("1.0", tk.END).strip())
-        else:
-            with open(self.calc_history_file, "w", encoding="utf-8") as f:
-                f.write(self.calc_history_text.get("1.0", tk.END).strip())
+        # if not self.use_vim:
+        with open(self.note_file, "w", encoding="utf-8") as f:
+            f.write(self.text_area.get("1.0", tk.END).strip())
+        with open(self.cal_notes_file, "w", encoding="utf-8") as f:
+            f.write(self.cal_notes_text.get("1.0", tk.END).strip())
+        with open(self.todo_file, "w", encoding="utf-8") as f:
+            f.write(self.todo_text_area.get("1.0", tk.END).strip())
+        with open(self.calc_history_file, "w", encoding="utf-8") as f:
+            f.write(self.calc_history_text.get("1.0", tk.END).strip())
 
     def toggle_window(self):
         self.root.after(0, self._perform_toggle)
@@ -1642,7 +2429,7 @@ class MiniSidekick:
             self.save_notes()
 
         self.root.update_idletasks()
-        self.cfg.set_value("Window", "geometry", self.root.geometry())
+        cfg_set(self.cfg, "Window", "geometry", self.root.geometry())
 
         self.root.deiconify()
         for win in self.sub_windows:
@@ -1664,7 +2451,7 @@ class MiniSidekick:
 
     def hide_window(self):
         self.save_notes()
-        self.cfg.set_value("Window", "geometry", self.root.geometry())
+        cfg_set(self.cfg, "Window", "geometry", self.root.geometry())
         self.root.withdraw()
         self.sub_windows = [w for w in self.sub_windows if w.winfo_exists()]
         for win in self.sub_windows:
@@ -1673,7 +2460,7 @@ class MiniSidekick:
 
     def quit_app(self):
         self.save_notes()
-        self.cfg.set_value("Window", "geometry", self.root.geometry())
+        cfg_set(self.cfg, "Window", "geometry", self.root.geometry())
         if self.hotkey_listener:
             self.hotkey_listener.stop()
         if os.path.exists(LOCK_FILE):
@@ -1789,13 +2576,6 @@ class MiniSidekick:
                 - "ask": prompts user to press Enter to close the window.
                 - "none": exits window immediately upon completion.
         """
-        #  mycompanion.conf [cmd_*] (geometry) 
-        # → ConfigManager.get_custom_commands() 
-        # → MiniSidekick.bind_custom_commands() 
-        # → MiniSidekick.run_command(..., geometry=...) 
-        # → MiniSidekick.open_in_terminal(..., geometry=...)
-        # import subprocess
-
         win_title = title or "MyCompanion Task"
         geom = geometry or "180x40"
 
@@ -1859,7 +2639,7 @@ class MiniSidekick:
             self.open_raw(cmd_str)
 
         elif open_in == "terminal":
-            geom = geometry or self.cfg.get_string("Window", "geometry", "180x40")
+            geom = geometry or cfg_get(self.cfg, "Window", "geometry", "180x40")
             self.open_in_terminal(cmd_str, title=title, geometry=geom)
 
         elif open_in == "silent":
@@ -2025,6 +2805,8 @@ class MiniSidekick:
 
         txt.insert("1.0", cleaned_output)
         txt.config(state=tk.DISABLED)
+    # ### EOB class MiniSidekick ### #
+
 
 if __name__ == "__main__":
     args = docopt(__doc__, version=VERSION)
@@ -2035,9 +2817,9 @@ if __name__ == "__main__":
         import inspect  # Only loaded into memory when debugging
 
     start_ai = args.get("--ai", False)
-    use_vim = args.get("--vim", False)
+    # use_vim = args.get("--vim", False)
 
     ensure_daemon(args)
 
-    app = MiniSidekick(start_with_ai=start_ai, use_vim=use_vim, doc_args=args)
+    app = MiniSidekick(start_with_ai=start_ai, doc_args=args)
     app.run()

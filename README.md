@@ -113,6 +113,31 @@ MyCompanion supports command-line flags for quick terminal editing:
 Custom command entries defined in your configuration file support all primary command execution options:
 
 ```ini
+[Window]
+geometry = 950x630+325+28
+
+[Theme]
+name = Cyberpunk Neon
+
+[Settings]
+ai_mode = false
+
+# External Editor Command for Ctrl-e
+# ----------------------------------------------------------------------
+# Set 'editor' to a native GUI editor (e.g. gvim, ghostwriter, gedit) 
+# OR provide a full terminal wrapper command if using a CLI editor (e.g. vim, nvim).
+#
+# Examples:
+#   GUI (Linux/Mac):      editor = gvim -f
+#   GUI (Linux/Mac):      editor = ghostwriter
+#   CLI via xterm:        editor = xterm -bw 4 -bd #00f3ff -geometry 100x30 -e vim
+#   CLI via Alacritty:    editor = alacritty -e nvim
+#   Windows GUI:          editor = notepad
+#
+# Leave empty or omitted to disable Ctrl-e external editing.
+editor = xterm -bw 4 -bd #00f3ff -geometry 100x30 -e vim
+md_editor = ghostwriter
+
 
 [cmd_htop]
 shortcut = <Alt-t>
