@@ -221,30 +221,28 @@ SYMBOL_MENU_CONFIG = {
         {"label": "🟢 Green Spot (Done)", "symbol": "🟢 "},
         {"label": "🔴 Red Spot (Blocked)", "symbol": "🔴 "},
         {"label": "🟡 Yellow Spot (In Progress)", "symbol": "🟡 "},
+        {"label": "🔍 Inspect / Investigate", "symbol": "🔍 "},
+        {"label": "🤔 Thinking / Query", "symbol": "🤔 "},
+        {"label": "⌛ Pending / Wait", "symbol": "⌛ "},
         {"label": "⏳ In Progress", "symbol": "⏳ "},
+        {"label": "⌛ Hourglass (Done)", "symbol": "⌛ "},
         {"label": "📌 Pinned / Important", "symbol": "📌 "},
         {"label": "💡 Idea / Insight", "symbol": "💡 "},
         {"label": "⚠️ Warning", "symbol": "⚠️ "},
         {"label": "❓ Red Question Mark", "symbol": "❓ "},
         {"label": "❔ White Question Mark", "symbol": "❔ "},
-        {"label": "🔍 Inspect / Investigate", "symbol": "🔍 "},
-        {"label": "🤔 Thinking / Query", "symbol": "🤔 "},
-        # Time & Scheduling
         {"label": "⏰ Alarm Clock", "symbol": "⏰ "},
         {"label": "⏱️ Stopwatch / Timer", "symbol": "⏱️ "},
         {"label": "⏲️ Kitchen Timer", "symbol": "⏲️ "},
-        {"label": "⏳ Hourglass (Running)", "symbol": "⏳ "},
-        {"label": "⌛ Hourglass (Done)", "symbol": "⌛ "},
         {"label": "🕰️ Mantel / Shelf Clock", "symbol": "🕰️ "},
-        {"label": "📅 Calendar (Monthly)", "symbol": "📅 "},
-        {"label": "📆 Tear-off Calendar", "symbol": "📆 "},
-        {"label": "🗓️ Spiral Calendar", "symbol": "🗓️ "},
         {"label": "🕒 3:00 / Clock Face", "symbol": "🕒 "},
         {"label": "🕕 6:00 / Clock Face", "symbol": "🕕 "},
         {"label": "🕘 9:00 / Clock Face", "symbol": "🕘 "},
         {"label": "🕛 12:00 / Noon-Midnight", "symbol": "🕛 "},
         {"label": "🔄 Loop / Recurring", "symbol": "🔄 "},
-        {"label": "⌛ Pending / Wait", "symbol": "⌛ "},
+        {"label": "📅 Calendar (Monthly)", "symbol": "📅 "},
+        {"label": "📆 Tear-off Calendar", "symbol": "📆 "},
+        {"label": "🗓️ Spiral Calendar", "symbol": "🗓️ "},
     ],
     "Bank & Markets": [
         {"label": "🐂 Bull Market (Wall St)", "symbol": "🐂 "},
@@ -563,7 +561,7 @@ SYMBOL_MENU_CONFIG = {
 
 TOP_LEVEL_CATEGORIES = [
     "Checkboxes",
-    "Status, Time & Priority",
+    "Status, Time, & Scheduling",
 ]
 
 CATEGORY_GROUPS = {
