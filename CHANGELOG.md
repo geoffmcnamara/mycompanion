@@ -1,3 +1,15 @@
+## 0.5.0 (2026-09-28)
+
+### Feat
+
+- **app**: enhance config flexibility, external editor handling, and subwindow UI
+- **app**: enhance config flexibility, external editor handling, and subwindow UI
+- **config**: expand config schema, allow raw commands, and add hot button shortcut viewer
+
+### Fix
+
+- **config**: synchronize baseline version 0.4.0 across files
+
 ## 0.5.0a0 (2026-09-22)
 
 ### Feat
