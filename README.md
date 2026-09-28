@@ -173,11 +173,19 @@ To maintain persistence across sessions, local files are managed automatically i
 
 ## 🌐 Wiki Links & Web URLs
 
-Wiki Links: Format links as [label](file:///absolute/path/to/file.nts). The text turns green and opens the target file on click.
+Wiki Links: Format links as 
+
+```markdown
+[label](file:///absolute/path/to/file.nts). The text turns green and opens the target file on click.
+```
 
 Note: Using two slashes (e.g. file://relative/path) builds a relative link.
 
 Web URLs: Standard HTTP/HTTPS URLs (e.g., https://google.com) highlight in blue and launch in your default web browser on click.
+
+```markdown
+https://calendar.google.com
+```
 
 ---
 
