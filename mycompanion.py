@@ -18,7 +18,7 @@ Shortcuts:
     Ctrl-1..4   Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)
     Ctrl-a      Toggle AI bar
     Alt-c       View config file
-    Ctrl-e      Edit file using configures [Settings] editor
+    Ctrl-e      Edit file if using configured [Settings] editor
     Ctrl-r      Run command dialog
     Ctrl-t      Open Theme Selector
     Ctrl-h / ?  Show Shortcuts & Help
