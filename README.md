@@ -1,118 +1,122 @@
 # 🧰 MyCompanion
 
-MyCompanion is a lightning-fast, lightweight desktop assistant (PIM Personal Information Manager) that stays resident in the background, giving you instant access to quick notes, a tod list, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey. Optional Gemini AI query and response.
+MyCompanion is a lightning-fast, lightweight desktop assistant (PIM Personal Information Manager) that stays resident in the background, giving you instant access to quick notes, a todo list, a calculator with saved history, and a dual-month calendar—all summoned or hidden with a single global hotkey. Optional Gemini AI query and response support.
 
 Designed for minimal friction and maximum speed, it runs quietly as a single-instance daemon and stays out of your way until you need it.
 
 A live header clock displays the current date, live time, and day of the week at a glance.
 
-The app allows wiki-like links to other files.
+The app supports wiki-like links to external files.
+
+---
 
 ## ✨ Features
 
-Global Hotkey Toggle: Press Ctrl + Space from anywhere in your operating system to instantly pull up or hide the application window.
+- **Global Hotkey Toggle:** Press `Ctrl + Space` from anywhere in your operating system to instantly pull up or hide the application window.
+- **Tab 1: Notes (`Ctrl-1`):** A clean, distraction-free markdown/text scratchpad with automatic saving.
+- **Tab 2: Calculator & History (`Ctrl-2`):** Type out standard math expressions and hit Enter. Keeps an automatic, reverse-chronological history log (most recent at the top) saved across sessions. The calculator history is editable for adding annotations.
+- **Tab 3: Calendar & Notes (`Ctrl-3`):** Displays a side-by-side view of the current and next month with today's date dynamically highlighted, backed by dedicated calendar notes.
+- **Tab 4: Todo (`Ctrl-4`):** Dedicated task tracking pane to manage, edit, and organize daily action items and checklists.
 
-Tab 1: Notes – Ctrl-1: A clean, distraction-free markdown/text scratchpad with automatic saving.
+---
 
-Tab 2: Calculator & History – Ctrl-2:  Type out standard math expressions and hit Enter. Keeps an automatic, reverse-chronological history log (most recent at the top) saved across sessions. The calculator history is editable for adding any annotations you desire.
+## 🤖 Optional Gemini AI Setup
 
-Tab 3: Calendar & Calendar Notes – Ctrl-3: Displays a side-by-side view of the current and next month with today's date dynamically highlighted in bright yellow, backed by dedicated calendar notes.
+To enable AI Query and Response (`Ctrl-a` when launched with `--ai`):
 
-Tab 4: Todo – Ctrl-4: Dedicated task tracking pane to manage, edit, and organize daily action items and checklists.
+1. Generate an API key at [Google AI Studio](https://aistudio.google.com/app/apikey).
 
-## 🤖 Optional AI Gemini Query and Response – Ctrl-a if launched with --ai option.
+2. Export the key in your environment before launching:
 
-- Set up your Gemini API Key: Generate an API key at Google AI Studio.
+   ```bash
+   export GEMINI_API_KEY="AI-YourKeyHere"
+   ```
 
-Bash
-export GEMINI_API_KEY="AI-YourKeyHere"
-SETUP GEMINI AI: (if you want AI Query/Response)
-  1. Generate an API key at: https://aistudio.google.com/app/apikey 
-     (create project name, import projects, create project api_key - this is subject to change) 
-  2. Export the key in your terminal session before launching:
-     export GEMINI_API_KEY="AI-YourKeyHere"
+3. Install the Gemini Python library:
 
+```Bash
+pip install google-genai
+pip install tiktoken --prefer-binary  # Optional: only if your system requests it
+```
 
+---
 
-## 🛠️ Prerequisites
+## 🛠️ Prerequisites & Installation
 
 Python 3.x
 
 Tkinter (usually bundled with Python on Linux/macOS/Windows)
 
-- pynput (for global hotkey listening)
-- docopt (for usage and arg parsing)
-
-You can install the required dependency via pip:
+Install dependencies via pip:
 
 ```Bash
-pip install pynput
-pip install docopt
+pip install pynput docopt
 ```
 
-
-## 📥 Installation
+Install directly from GitHub:
 
 ```Bash
-pip install git+https://github.com/your-username/mycompanion.git
+pip install git+[https://github.com/your-username/mycompanion.git](https://github.com/your-username/mycompanion.git)
 ```
 
-Using SSH:
-```Bash
-pip install git+ssh://git@github.com/your-username/mycompanion.git
-```
+---
 
-## 🚀 Running the App
+### 🚀 Running the App
 
-Clone the repository and run the script directly from your terminal:
-  
-(Optional) Install these if you want to use Gemini AI
-
-```Bash
-pip install google-genai 
-pip install tiktoken --prefer-binary # only if your system complains that it is missing
-```
+Run the script directly from your terminal:
 
 ```Bash
 mycompanion.py
 ```
 
-On first launch, the program automatically spawns as a background daemon, handles its own lock file, and listens for your Ctrl + Space toggle.
+On first launch, the program automatically spawns as a background daemon, manages its own lock file, and listens for your Ctrl + Space toggle.
 
-## 💻 Command-Line Interface
+Command-Line Flags
+mycompanion.py --ai — Launch with AI prompt query and response enabled.
 
-MyCompanion supports command-line flags for quick terminal editing:
-    - use mycompanion.py --ai for AI prompt query and response # see above for configuring Gemini AI
-    - use mycompanion.py --vim for launching vim as you editor for all edits
-
-## 💻 Running navigation commands:
-
-    - Ctrl-q      to quit and drop mycompanion out of memory (this is the only way to drop it out of memory) It saves data and status on exit.
-    - Ctrl-space  toggles all active windows to the top - or to drop them back into the background (but still resident in memory) all data and status is saved
-    - Ctrl-t      activates a theme selection window - selection gets saved to mycompanion.conf
-    - Ctrl-1      make note pane active
-    - Ctrl-2      make calc pane active
-    - Ctrl-3      make calendar pane active
-    - Ctrl-4      make todo pane active
-    - Ctrl-r      run a command (allows mode: terminal, window, silent or raw)
-    - Ctrl-a      activates AI query promt (at the bottom)
-    - Alt-c       view the mycompanion.conf file
-    - Ctrl-s      if text is selected a new file choice window opens and navigates to another file for saving the selected text. (There is a button for this as well)
-
+mycompanion.py --vim — Launch using Vim as the default editor for all external edits.
 
 ---
+
+## 💻 Navigation & Global Shortcuts
+
+Ctrl-space — Toggle application window to top / send to background (remains resident in memory; all state is saved).
+
+Ctrl-q — Save state and quit mycompanion completely (removes daemon from memory).
+
+Ctrl-t — Activate theme selection window (saves selection to mycompanion.conf).
+
+Ctrl-1 — Switch to Notes tab.
+
+Ctrl-2 — Switch to Calculator tab.
+
+Ctrl-3 — Switch to Calendar tab.
+
+Ctrl-4 — Switch to Todo tab.
+
+Ctrl-r — Run custom command (supports modes: terminal, window, silent, or raw).
+
+Ctrl-a — Activate AI query prompt (at bottom).
+
+Alt-c — View and edit mycompanion.conf.
+
+Ctrl-e — If [Settings] editor is defined then it will be launcged to open the current file.
+
+Ctrl-s — If text is selected, opens file choice window to save selected text to a new file.
 
 ### Window Behavior
 
-> **Note:** `mycompanion` is configured as a floating, topmost window that stays on top of all other active desktop windows. To minimize or hide the app, press **`Ctrl+Space`** or click anywhere on the **footer status message** at the bottom of the window.
+Note: mycompanion runs as a floating, topmost window. 
+
+To minimize or hide the app, press Ctrl+Space or click anywhere on the footer status message at the bottom of the window.
 
 ---
 
-### Configuration Syntax (`cmd_*`)
+## ⚙️ Configuration Syntax (cmd_*)
 
-Custom command entries defined in your configuration file support all primary command execution options:
+Custom command entries defined in mycompanion.conf support flexible launcher modes:
 
-```ini
+```Ini, TOML
 [Window]
 geometry = 950x630+325+28
 
@@ -121,64 +125,60 @@ name = Cyberpunk Neon
 
 [Settings]
 ai_mode = false
-
-# External Editor Command for Ctrl-e
-# ----------------------------------------------------------------------
-# Set 'editor' to a native GUI editor (e.g. gvim, ghostwriter, gedit) 
-# OR provide a full terminal wrapper command if using a CLI editor (e.g. vim, nvim).
-#
-# Examples:
-#   GUI (Linux/Mac):      editor = gvim -f
-#   GUI (Linux/Mac):      editor = ghostwriter
-#   CLI via xterm:        editor = xterm -bw 4 -bd #00f3ff -geometry 100x30 -e vim
-#   CLI via Alacritty:    editor = alacritty -e nvim
-#   Windows GUI:          editor = notepad
-#
-# Leave empty or omitted to disable Ctrl-e external editing.
-editor = xterm -bw 4 -bd #00f3ff -geometry 100x30 -e vim
 md_editor = ghostwriter
 
+# External Editor Command for Ctrl-e
+# -----------------------------------------------------------
+# Set 'editor' to a native GUI editor (e.g. gvim -f, ghostwriter, gedit) 
+# OR provide a full terminal wrapper command if using a CLI
+#   editor (e.g. vim, nvim).
+#   editor = xterm -bw 4 -bd #00f3ff -geometry 100x30 -e vim
 
 [cmd_htop]
 shortcut = <Alt-t>
 command = htop
-mode = terminal # mode could also be: window (ansi codes and emojies etc may not show correctly) | silent | raw (command is executed as is; no window or terminal wrapper)
+mode = terminal
 title = htop
 
+[cmd_finsyms]
 shortcut = <Control-Shift-F>
-mode = terminal
 command = /home/geoffm/dev/python/econ/finsyms.py
+mode = terminal
 title = finsyms
 
 [cmd_xterm]
 shortcut = <Control-Shift-x>
-cmd = xterm -geometry 180x40 -T 'Weather Report' -e bash -c 'curl -s wttr.in/Elizabeth_City ; echo "Please use Ctrl-D to exit" ; exec bash --norc'
+command = xterm -geometry 180x40 -T 'Weather Report' -e bash -c 'curl -s wttr.in/Elizabeth_City ; echo "Please use Ctrl-D to exit" ; exec bash --norc'
 mode = raw
-
 ```
 
+---
+
 ## 📁 Generated Files
+To maintain persistence across sessions, local files are managed automatically inside your platform's user configuration directory:
 
-To keep your data persistent between sessions, the app automatically creates local text files in your home directory based on the script's root name:
+~/<platform_dependent>/{rootname}_notes.txt
 
-~/r<platform_dependant>/{rootname}_notes.txt
+~/<platform_dependent>/{rootname}_cal_notes.txt
 
-~/<platform_dependant>/{rootname}_cal_notes.txt
+~/<platform_dependent>/{rootname}_calc_notes.txt
 
-~/<platform_dependant>/{rootname}_calc_notes.txt
+~/<platform_dependent>/{rootname}_todo_notes.txt
 
-~/<platform_dependant>/{rootname}_todo_notes.txt
+~/<platform_dependent>/{rootname}.conf (stores geometry, theme, --ai-mode, and --vim-mode)
 
-~/<platform_dependant>/{rootname}.conf  which holds geometry, position, theme, and under [Settings] --ai-mode and --vim-mode
+~/<platform_dependent>/{rootname}.lock (daemon runtime lock file)
 
-also uses a lock file when running:
+---
 
-~/<platform_dependant>/{rootname}.lock
+## 🌐 Wiki Links & Web URLs
 
-## 🌐 wiki-like connections
+Wiki Links: Format links as [label](file:///absolute/path/to/file.nts). The text turns green and opens the target file on click.
 
-    - wiki-like links: use [my_name](file:///home/user/dev/nts/myfile.nts) - link will turn green and allows opening the file names
-        Note: if you only use two slashes ie: "//" the link becomes relative (be careful with this)
-    - url links are highlighted in blue and when clicked will open a browser on that url - syntax: https://google.com 
+Note: Using two slashes (e.g. file://relative/path) builds a relative link.
 
-### Enjoy!
+Web URLs: Standard HTTP/HTTPS URLs (e.g., https://google.com) highlight in blue and launch in your default web browser on click.
+
+---
+
+**Enjoy!**
