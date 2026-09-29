@@ -1390,8 +1390,6 @@ def ensure_daemon(doc_args):
     # ### EOB def ensure_daemon(): ### #
 
 
-import re
-
 def solve_proportion(val, default=None):
     """Parse and solve proportion strings for any non-numeric variable name or symbol."""
     if not isinstance(val, str):
@@ -1402,8 +1400,8 @@ def solve_proportion(val, default=None):
     # Pattern 1: Text/Colon format: "17 is to 30 as price is to 170" or "17:30 :: ? : 170"
     pattern_text = r"^(.+?)\s+(?:is\s+to|:)\s+(.+?)\s+(?:as|::|=)\s+(.+?)\s+(?:is\s+to|:)\s+(.+?)$"
 
-    # Pattern 2: Fraction format: "17/30 = price/170"
-    pattern_eq = r"^(.+?)\s*/\s*(.+?)\s*=\s*(.+?)\s*/\s*(.+?)$"
+    # Pattern 2: Fraction format: "17/30 =|as price/170"
+    pattern_eq = r"^(.+?)\s*/\s*(.+?)\s*(?:=|\bas\b)\s*(.+?)\s*/\s*(.+?)$"
 
     match = re.match(pattern_text, s) or re.match(pattern_eq, s)
     if not match:
