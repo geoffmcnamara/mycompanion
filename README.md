@@ -195,6 +195,105 @@ https://contacts.google.com
 https://mail.google.com
 ```
 
+
+# Calculator Input Reference Guide
+
+The `mycompanion` calculator supports standard mathematical operations, inline trigonometric and advanced math functions, and flexible algebraic proportion equations.
+
+---
+
+## 1. Standard Arithmetic & Operations
+
+All basic Python arithmetic operators are supported out of the box.
+
+| Category | Input Syntax | Example Input | Result |
+| :--- | :--- | :--- | :--- |
+| **Basic Arithmetic** | `+`, `-`, `*`, `/` | `(200 + 4) / 12` | `= 17` |
+| **Exponents / Powers** | `**` | `2 ** 8` | `= 256` |
+| **Square Roots** | `** 0.5` | `144 ** 0.5` | `= 12` |
+| **N-th Roots** | `** (1/n)` | `27 ** (1/3)` | `= 3` |
+| **Integer Division** | `//` | `100 // 7` | `= 14` |
+| **Modulo (Remainder)** | `%` | `100 % 7` | `= 2` |
+
+---
+
+## 2. Advanced Math Functions & Constants
+
+Common mathematical functions and constants can be called directly without prefixing `math.`.
+
+### Functions & Aggregations
+| Function | Description | Example Input | Result |
+| :--- | :--- | :--- | :--- |
+| `abs(x)` | Absolute value | `abs(-42.5)` | `= 42.5` |
+| `round(x, n)` | Round to $n$ decimal places | `round(17 / 30, 4)` | `= 0.5667` |
+| `sqrt(x)` | Square root function | `sqrt(144) + 10` | `= 22` |
+| `log(x)` | Natural logarithm ($\ln$) | `log(10)` | `= 2.3026` |
+| `log10(x)` | Base-10 logarithm | `log10(100)` | `= 2` |
+| `factorial(n)` | Factorial ($n!$) | `factorial(5)` | `= 120` |
+| `sum([a, b, ...])` | Sum of a list | `sum([12.50, 45.00, 100.25])` | `= 157.75` |
+| `min(...)` / `max(...)` | Minimum or maximum value | `max(14.2, 98.6, 50.0)` | `= 98.6` |
+
+### Trigonometry
+Trigonometric functions accept angles in **radians**. To evaluate using **degrees**, wrap the input angle in `radians()`.
+
+| Function / Type | Example Input | Result |
+| :--- | :--- | :--- |
+| **Sine (Radians)** | `sin(1.5708)` | `= 1` |
+| **Sine (Degrees)** | `sin(radians(30))` | `= 0.5` |
+| **Cosine (Degrees)** | `cos(radians(60))` | `= 0.5` |
+| **Tangent (Degrees)** | `tan(radians(45))` | `= 1` |
+| **Inverse Sine (Arcsine)** | `degrees(asin(0.5))` | `= 30` |
+
+### Constants
+| Constant | Symbol | Input Syntax | Value |
+| :--- | :---: | :--- | :--- |
+| **Pi** | $\pi$ | `pi` | `3.1416` |
+| **Euler's Number** | $e$ | `e` | `2.7183` |
+
+*Example using constants:* `2 * pi * 10` $\rightarrow$ `= 62.8319`
+
+---
+
+## 3. Algebraic Proportion Ratios
+
+The calculator automatically detects and solves proportion ratios for any non-numeric variable name or symbol (e.g., `x`, `price`, `target`, `?`). 
+
+It handles word-based phrasing, ratio colons, equation slashes, and mixed syntax styles.
+
+### Supported Proportion Syntax Styles
+
+| Style | Pattern Example | Input Example | Solved Output |
+| :--- | :--- | :--- | :--- |
+| **Text Phrase** | `A is to B as var is to D` | `17 is to 30 as price is to 170` | `= 96.3333` |
+| **Fraction Equation** | `A/B = var/D` | `17/30 = x/170` | `= 96.3333` |
+| **Colon Notation** | `A:B :: var:D` | `17:30 :: ? : 170` | `= 96.3333` |
+| **Mixed Slash/Text** | `A/B as var/D` | `17/30 as x/170` | `= 96.3333` |
+| **Mixed Colon/Equals** | `A:B = var/D` | `17:30 = target/170` | `= 96.3333` |
+
+### Variable Positioning
+The unknown variable can occupy any of the four positions in the ratio:
+
+* **Position 1 ($A$):** `cost / 50 = 3 / 10` $\rightarrow$ `= 15`
+* **Position 2 ($B$):** `100 / price = 4 / 20` $\rightarrow$ `= 500`
+* **Position 3 ($C$):** `17/30 = x/170` $\rightarrow$ `= 96.3333`
+* **Position 4 ($D$):** `4 : 8 :: 12 : ?` $\rightarrow$ `= 24`
+
+---
+
+## 4. Complex Compound Expressions
+
+You can combine standard financial calculations, powers, and math built-ins into single-line entries:
+
+```python
+# Compound interest over 5 years at 5%:
+1500 * (1 + 0.05) ** 5
+
+# Hypotenuse of a right triangle (a² + b² = c²):
+sqrt(3**2 + 4**2)
+
+# Compound expression with rounding:
+round(1000 * (1 + 0.07/12)**(12*10), 2)
+```
 ---
 
 **Enjoy!**

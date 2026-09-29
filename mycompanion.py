@@ -52,6 +52,8 @@ import re
 import webbrowser
 import tempfile
 import shlex
+import math
+
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
@@ -1388,6 +1390,59 @@ def ensure_daemon(doc_args):
     # ### EOB def ensure_daemon(): ### #
 
 
+import re
+
+def solve_proportion(val, default=None):
+    """Parse and solve proportion strings for any non-numeric variable name or symbol."""
+    if not isinstance(val, str):
+        return default if default is not None else val
+
+    s = val.strip().lower()
+
+    # Pattern 1: Text/Colon format: "17 is to 30 as price is to 170" or "17:30 :: ? : 170"
+    pattern_text = r"^(.+?)\s+(?:is\s+to|:)\s+(.+?)\s+(?:as|::|=)\s+(.+?)\s+(?:is\s+to|:)\s+(.+?)$"
+
+    # Pattern 2: Fraction format: "17/30 = price/170"
+    pattern_eq = r"^(.+?)\s*/\s*(.+?)\s*=\s*(.+?)\s*/\s*(.+?)$"
+
+    match = re.match(pattern_text, s) or re.match(pattern_eq, s)
+    if not match:
+        return default if default is not None else val
+
+    terms = [t.strip() for t in match.groups()]
+
+    var_index = None
+    for i, term in enumerate(terms):
+        try:
+            terms[i] = float(term)
+        except ValueError:
+            if var_index is None:
+                var_index = i
+            else:
+                # More than one variable found; unparseable
+                return default if default is not None else val
+
+    # If all 4 terms are numbers, it's not a variable proportion
+    if var_index is None:
+        return default if default is not None else val
+
+    a, b, c, d = terms
+
+    try:
+        if var_index == 0:    # var / B = C / D
+            return (b * c) / d
+        elif var_index == 1:  # A / var = C / D
+            return (a * d) / c
+        elif var_index == 2:  # A / B = var / D
+            return (a * d) / b
+        elif var_index == 3:  # A / B = C / var
+            return (b * c) / a
+    except ZeroDivisionError:
+        return default if default is not None else val
+
+    return default if default is not None else val
+
+
 # ----------------------------------------------------------------------
 # MiniSidekick Class
 # ----------------------------------------------------------------------
@@ -2330,8 +2385,33 @@ class MiniSidekick:
         expr = self.calc_display.get().strip()
         if not expr:
             return
+        
         try:
-            result = eval(expr, {"__builtins__": None}, {})
+            # 1. Try solving as a proportion string first
+            sentinel = object()
+            result = solve_proportion(expr, default=sentinel)
+            
+            # 2. If it wasn't a proportion string, fall back to standard math eval
+            if result is sentinel:
+                math_globals = {
+                    "__builtins__": None,
+                    # Common built-in functions
+                    "abs": abs, "round": round, "sum": sum, "min": min, "max": max,
+                    # Trig functions & angle conversion
+                    "sin": math.sin, "cos": math.cos, "tan": math.tan,
+                    "asin": math.asin, "acos": math.acos, "atan": math.atan,
+                    "radians": math.radians, "degrees": math.degrees,
+                    # Common math functions & constants
+                    "sqrt": math.sqrt, "log": math.log, "log10": math.log10,
+                    "factorial": math.factorial,
+                    "pi": math.pi, "e": math.e
+                }
+                result = eval(expr, math_globals, {})
+            
+            # Format float results nicely (e.g., 96.33333333333333 -> 96.3333 or clean integer if whole)
+            if isinstance(result, float):
+                result = int(result) if result.is_integer() else round(result, 4)
+            
             result_str = f"= {result}"
             self.calc_result.config(text=result_str, fg="#4ec9b0")
 
@@ -2349,6 +2429,7 @@ class MiniSidekick:
             self.calc_display.delete(0, tk.END)
         except Exception:
             self.calc_result.config(text="Invalid expression", fg="#f44747")
+
 
     def load_calendar(self):
         now = datetime.datetime.now()
