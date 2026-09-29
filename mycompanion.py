@@ -1954,9 +1954,23 @@ class MiniSidekick:
         if path.suffix.lower() in [".md", ".markdown"]:
             md_editor = cfg_get(self.cfg, "Settings", "md_editor")
             if md_editor:
-                # dbug(f"{md_editor=}")
-                self.open_raw(f"{md_editor} {path}")
-                return  # Skip internal editor window completely!
+                # Ask the user if they want to use the configured markdown editor
+                msg = f"Open '{path.name}' in external editor ({md_editor})?"
+                if messagebox.askyesno("Open External Editor", msg):
+                    # dbug(f"{md_editor=}")
+                    self.open_raw(f"{md_editor} {path}")
+                    return  # Skip internal editor window completely!
+                
+                # If user clicked 'No', execution continues past this block 
+                # to load the file in the internal editor.
+
+        # # 2. Route Markdown files to external editor if configured
+        # if path.suffix.lower() in [".md", ".markdown"]:
+        #     md_editor = cfg_get(self.cfg, "Settings", "md_editor")
+        #     if md_editor:
+        #         # dbug(f"{md_editor=}")
+        #         self.open_raw(f"{md_editor} {path}")
+        #         return  # Skip internal editor window completely!
         
         # 3. Default fallback for non-md files or when md_editor is blank
         self.open_file_subwindow(path)

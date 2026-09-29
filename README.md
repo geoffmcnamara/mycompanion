@@ -187,6 +187,14 @@ Web URLs: Standard HTTP/HTTPS URLs (e.g., https://google.com) highlight in blue 
 https://calendar.google.com
 ```
 
+Tip: If you use google calendar and contacts put this in your calendar notes on the mycompanion calendar pane:
+
+```
+https://calendar.google.com
+https://contacts.google.com
+https://mail.google.com
+```
+
 ---
 
 **Enjoy!**
