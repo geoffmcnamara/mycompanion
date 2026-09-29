@@ -1,3 +1,17 @@
+## 0.5.1 (2026-09-29)
+
+### Fix
+
+- **app**: added math calcs to calculator and added proportion ratios
+- **app-readme**: fix md_editor ask and add examples of url in readme
+- **app**: fixed help window content
+- **app**: corrected typo in __doc__
+- **app**: fixed insert menu category names and moved symbols to better positions
+
+### Refactor
+
+- **app-readme**: add import math and parsing porportion ratios - readme updated to reflect these changes
+
 ## 0.5.0 (2026-09-28)
 
 ### Feat
