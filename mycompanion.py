@@ -1508,8 +1508,8 @@ class MiniSidekick:
                 self.enable_ai = False  # Gracefully fall back to non-AI mode
 
         self.root = tk.Tk(className="mycompanion")
-        
-        # Check if external editor is configured and bind Ctrl-e
+
+        # Check external editor is configured and bind Ctrl-e
         editor_setting = self.cfg.get("Settings", {}).get("editor", "").strip().lower()
         # dbug(f"[INIT] Editor setting detected: '{editor_setting}'")
 
@@ -1585,27 +1585,35 @@ class MiniSidekick:
         ai_btn.pack(side=tk.RIGHT)
 
         # --- FOOTER AREA ---
-        # Using a Button with bd=1 and relief=tk.SOLID gives a crisp, thin 1px outline across X11/Tkinter.
-        # Binding it to command=self.toggle_window allows clicking anywhere on the footer to hide/show.
-        self.footer_btn = tk.Button(
+        # Fetch initial theme colors dictionary
+        theme_name = self.cfg.get("Theme", {}).get("name", "Cyberpunk Neon")
+        theme_colors = THEMES.get(theme_name, THEMES.get("Dark / White (Default)", {}))
+
+        footer_bg = theme_colors.get("nav_bg", "#1e1e1e")
+        text_fg = theme_colors.get("fg", "#d4d4d4")
+        # btn_bg = theme_colors.get("btn_bg", theme_colors.get("panel_bg", "#333333"))
+        btn_fg = theme_colors.get("btn_fg", text_fg)
+
+        self.footer_frame = tk.Frame(
             self.root,
             bd=1,
             relief=tk.SOLID,
-            highlightthickness=0,
-            command=self.toggle_window,
-            cursor="hand2"  # Visual cue that the footer is interactive
+            bg=footer_bg,
         )
-        self.footer_btn.pack(side=tk.BOTTOM, fill=tk.X, padx=2, pady=2)
+        self.footer_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=2, pady=2)
 
-        self.status_label = tk.Label(
-            self.footer_btn,
-            text="Note: mycompanion always holds topmost window. Click here or press Ctrl+Space to hide",
-            font=("Helvetica", 9, "italic")
+        # Save Button (Right side)
+        self.save_btn = tk.Button(
+            self.footer_frame,
+            text="Save (Ctrl-S)",
+            command=self.save_file,
+            bg=footer_bg,
+            fg=btn_fg,
+            bd=0,
+            padx=10,
+            pady=2
         )
-        self.status_label.pack(pady=2)
-
-        # Ensure clicking directly on the label text also triggers the toggle action
-        self.status_label.bind("<Button-1>", lambda e: self.toggle_window())
+        self.save_btn.pack(side=tk.RIGHT, padx=5, pady=2)
 
         # --- MAIN CONTENT AREA ---
         self.content_frame = tk.Frame(self.root)
@@ -1766,6 +1774,31 @@ class MiniSidekick:
         self.current_theme_name = self.load_saved_theme()
         self.apply_theme(self.current_theme_name)
 
+    def get_active_filepath(self):
+        """Returns the target file path for whichever view is currently active."""
+        mapping = {
+            "notes": getattr(self, "note_file", None),
+            "todo": getattr(self, "todo_file", None),
+            "cal": getattr(self, "cal_notes_file", None),
+            "calc": getattr(self, "calc_history_file", None),
+        }
+        return mapping.get(self.current_view)
+
+    def save_file(self, event=None):
+        """Saves the contents of the currently active pane to its corresponding file."""
+        text_widget = self.get_active_text_widget()
+        file_path = self.get_active_filepath()
+
+        if text_widget and file_path:
+            content = text_widget.get("1.0", tk.END)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            
+            # Optional: Re-apply link styling after save
+            if hasattr(self, "apply_link_parsing"):
+                self.apply_link_parsing(text_widget)
+                
+            print(f"Successfully saved {self.current_view} pane to {file_path}")
 
     def get_active_text_widget(self):
         """Returns whichever text widget belongs to the current view."""
@@ -1778,6 +1811,18 @@ class MiniSidekick:
         elif self.current_view == "calc":
             return self.calc_history_text
         return None
+
+    # def get_active_filepath(self):
+    #     """Returns the file path belonging to the currently active view."""
+    #     if self.current_view == "notes":
+    #         return self.notes_file  # or self.notes_path
+    #     elif self.current_view == "todo":
+    #         return self.todo_file
+    #     elif self.current_view == "cal":
+    #         return self.cal_notes_file
+    #     elif self.current_view == "calc":
+    #         return self.calc_history_file
+    #     return None
 
 
     def show_insert_menu(self, event=None):
@@ -2047,7 +2092,7 @@ class MiniSidekick:
             messagebox.showerror("File Error", f"Could not create file:\n{err}")
             return
 
-        # 2. Route Markdown files to external editor if configured
+        # 2. Route Markdown files to e ifxternal editor if configured
         if path.suffix.lower() in [".md", ".markdown"]:
             md_editor = cfg_get(self.cfg, "Settings", "md_editor")
             if md_editor:
