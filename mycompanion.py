@@ -57,7 +57,7 @@ import math
 
 ROOTNAME = "mycompanion"
 TITLE = "MyCompanion"
-VERSION = "0.6.0"
+VERSION = "0.6.1"
 DEBUG = False
 # DEBUG = True  # uncomment this to initiate debugging
 if DEBUG:

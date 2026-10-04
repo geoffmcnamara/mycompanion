@@ -1,3 +1,9 @@
+## 0.6.1 (2026-10-04)
+
+### Fix
+
+- **app**: change footer btn to save
+
 ## 0.6.0 (2026-10-04)
 
 ### Feat
