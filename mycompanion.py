@@ -4,13 +4,14 @@
      mycompanion.py
 =======================
 Usage:
-    mycompanion.py [--ai] [--log] [--debug]
+    mycompanion.py [--ai] [--log] [--debug] [--toggle]
     mycompanion.py (-h | --help)
 
 Options:
     -h --help   Show help and storage paths.
     --ai        Start with AI bar open.
     -l --log    Log stdout/stderr to mycompanion.log.
+    --toggle    Opt-in TSR background mode (X11 only, supports Ctrl+Space).
     -d --debug  Enable debug output and run in foreground.
 
 Shortcuts:
@@ -40,7 +41,6 @@ import configparser
 import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
-from pynput import keyboard
 import subprocess
 import calendar
 import datetime
@@ -599,6 +599,27 @@ CATEGORY_GROUPS = {
     ],
 }
 
+
+# def check_single_instance():
+#     if os.path.exists(LOCK_FILE):
+#         # Attempt to bring the existing window to the front
+#         try:
+#             # Using wmctrl:
+#             subprocess.run(["wmctrl", "-x", "-a", "mycompanion"], check=True)
+# 
+#             # OR using xdotool (alternative):
+#             # subprocess.run(["xdotool", "search", "--onlyvisible", "--class", "mycompanion", "windowactivate"], check=True)
+#         except (subprocess.CalledProcessError, FileNotFoundError):
+#             pass  # Fallback if window isn't found or tool isn't installed
+# 
+#         print("MyCompanion is already running. Focused existing window.")
+#         sys.exit(0)
+# 
+#     # Create lockfile
+#     with open(LOCK_FILE, "w") as f:
+#         f.write(str(os.getpid()))
+# Did not implement this as it wasn't working the way I wanted - left the code here for more research
+# check_single_instance()  
 
 def dbug(msg: str) -> None:
     """Helper function to print debug messages only when DEBUG is enabled."""
@@ -1315,12 +1336,11 @@ def print_help_and_paths():
     print("----------------------------------------")
 
 
+def is_wayland() -> bool:
+    """Check if the current desktop session is running on Wayland."""
+    return os.environ.get("XDG_SESSION_TYPE", "").lower() == "wayland"
 
-def ensure_daemon(doc_args):
-    global DEBUG
-    script_path = os.path.abspath(__file__)
-    python_exec = sys.executable
-
+def ensure_daemon(doc_args: dict) -> None:
     # 1. Lockfile check
     if os.path.exists(LOCK_FILE):
         try:
@@ -1339,16 +1359,35 @@ def ensure_daemon(doc_args):
         except PermissionError:
             sys.exit(0)
 
+    # Write lockfile for the current process
+    with open(LOCK_FILE, "w", encoding="utf-8") as f:
+        f.write(str(os.getpid()))
+
+    # 1. Standard Window Mode (Default): Bypass daemon/subprocess spawning entirely
+    if not doc_args.get("--toggle") or is_wayland():
+        if doc_args.get("--toggle") and is_wayland():
+            print("Warning: --toggle (TSR mode) is not supported under Wayland.")
+            print("Running in standard window mode instead...")
+
+        os.environ["SIDEKICK_DAEMON"] = "1"
+        return
+
+
+
+    # 2. Wayland Guard: If --toggle WAS requested but we're on Wayland, warn and fallback
+    if is_wayland():
+        print("Warning: --toggle (TSR mode) is not supported under Wayland.")
+        print("Running in standard window mode instead...")
+        os.environ["SIDEKICK_DAEMON"] = "1"
+        return
+
+    global DEBUG
+    script_path = os.path.abspath(__file__)
+    python_exec = sys.executable
+
+
     # 2. Main launch handling
     if os.environ.get("SIDEKICK_DAEMON") != "1":
-        # if DEBUG:
-        #     print("[DEBUG] Running in foreground debug mode...", flush=True)
-        #     os.environ["SIDEKICK_DAEMON"] = "1"
-        #     return  # <-- Stops backgrounding and keeps terminal attached
-
-        # Always print startup help and storage paths on launch
-        print_help_and_paths()
-
         # Handle --log setup if requested
         log_handle = None
         if doc_args.get("--log"):
@@ -1446,6 +1485,7 @@ def solve_proportion(val, default=None):
 # ----------------------------------------------------------------------
 class MiniSidekick:
     def __init__(self, start_with_ai=False, doc_args=None, **kwargs):
+        self.doc_args = doc_args or {}
         # self.cfg = ConfigManager()  # maybe rename cfg to cfg_d later?
         self.cfg = load_cfg_d()
         # dbug(f"{self.cfg=}")
@@ -1467,7 +1507,7 @@ class MiniSidekick:
                 )
                 self.enable_ai = False  # Gracefully fall back to non-AI mode
 
-        self.root = tk.Tk()
+        self.root = tk.Tk(className="mycompanion")
         
         # Check if external editor is configured and bind Ctrl-e
         editor_setting = self.cfg.get("Settings", {}).get("editor", "").strip().lower()
@@ -1476,8 +1516,6 @@ class MiniSidekick:
         if editor_setting:
             # dbug(f"[INIT] Registering global <Control-e> binding for editor '{editor_setting}'...")
             self.root.bind_all( "<Control-e>", lambda evt: handle_external_edit(evt, self.root, self.cfg))
-        # else:
-            # dbug("[INIT] Skipping <Control-e> binding (editor != 'vim')")
 
         def handle_exception(exc_type, exc_value, exc_traceback):
             if issubclass(exc_type, KeyboardInterrupt):
@@ -1497,7 +1535,13 @@ class MiniSidekick:
         saved_geometry = self.cfg.get("Window", {}).get("geometry", "640x500")
         self.root.geometry(saved_geometry)
         self.root.attributes("-topmost", True)
-        self.root.withdraw()
+        if self.doc_args.get("--toggle") and not is_wayland():
+            self.root.withdraw()
+            self.is_visible = False
+        else:
+            self.root.deiconify()
+            self.is_visible = True
+        # self.root.withdraw()
 
         self.last_checked_date = datetime.datetime.now().date()
         self.sub_windows = []
@@ -2014,17 +2058,6 @@ class MiniSidekick:
                     self.open_raw(f"{md_editor} {path}")
                     return  # Skip internal editor window completely!
                 
-                # If user clicked 'No', execution continues past this block 
-                # to load the file in the internal editor.
-
-        # # 2. Route Markdown files to external editor if configured
-        # if path.suffix.lower() in [".md", ".markdown"]:
-        #     md_editor = cfg_get(self.cfg, "Settings", "md_editor")
-        #     if md_editor:
-        #         # dbug(f"{md_editor=}")
-        #         self.open_raw(f"{md_editor} {path}")
-        #         return  # Skip internal editor window completely!
-        
         # 3. Default fallback for non-md files or when md_editor is blank
         self.open_file_subwindow(path)
 
@@ -2543,13 +2576,16 @@ class MiniSidekick:
         self.is_visible = True
 
     def hide_window(self):
-        self.save_notes()
-        cfg_set(self.cfg, "Window", "geometry", self.root.geometry())
-        self.root.withdraw()
-        self.sub_windows = [w for w in self.sub_windows if w.winfo_exists()]
-        for win in self.sub_windows:
-            win.withdraw()
-        self.is_visible = False
+        # In TSR mode (--toggle), withdraw to background
+        if self.doc_args.get("--toggle") and not is_wayland():
+            self.root.withdraw()
+            self.sub_windows = [w for w in self.sub_windows if w.winfo_exists()]
+            for win in self.sub_windows:
+                win.withdraw()
+            self.is_visible = False
+        else:
+            # In standard window mode, closing/hiding quits the app cleanly
+            self.quit_app()
 
     def quit_app(self):
         self.save_notes()
@@ -2565,14 +2601,23 @@ class MiniSidekick:
         sys.exit(0)
 
     def run(self):
-        self.hotkey_listener = keyboard.GlobalHotKeys({
-            '<ctrl>+<space>': self.toggle_window
-        })
-        self.hotkey_listener.start()
+        # Only start pynput global hotkeys if --toggle was requested and not on Wayland
+        if self.doc_args.get("--toggle") and not is_wayland():
+            try:
+                from pynput import keyboard
+                self.hotkey_listener = keyboard.GlobalHotKeys({
+                    '<ctrl>+<space>': self.toggle_window
+                })
+                self.hotkey_listener.start()
+            except ImportError:
+                print("Warning: pynput is required for TSR hotkey mode.")
+                print("Install it with: pip install pynput")
+
         try:
             self.root.mainloop()
         except KeyboardInterrupt:
             self.quit_app()
+
 
     def show_help_legend(self, event=None):
         win = tk.Toplevel(self.root)
@@ -2596,7 +2641,6 @@ class MiniSidekick:
         # 2. Control Frame & Close Button (Bottom)
         ctrl_frame = tk.Frame(win, bg=colors["panel_bg"], pady=6, padx=10)
         ctrl_frame.pack(side=tk.BOTTOM, fill=tk.X)
-
         close_btn = tk.Button(
             ctrl_frame, text="Close", command=win.destroy,
             bg=colors["btn_bg"], fg=colors["btn_fg"], bd=0, padx=12, pady=3
@@ -2613,7 +2657,7 @@ class MiniSidekick:
 
         content = (
             "GLOBAL SHORTCUTS:\n"
-            "  Ctrl-Space   : Toggle main window visibility\n"
+            "  Ctrl-Space   : Toggle main window visibility (If --toggle option was invoked)\n"
             "  Ctrl-1..4    : Switch tabs (1:Notes, 2:Calc, 3:Cal, 4:Todo)\n"
             "  Ctrl-a       : Toggle Gemini AI bar\n"
             "  Alt-c        : View configuration file\n"

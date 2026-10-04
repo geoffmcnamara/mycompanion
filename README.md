@@ -78,9 +78,81 @@ mycompanion.py --vim — Launch using Vim as the default editor for all external
 
 ---
 
+## 🖥️ Desktop Menu & Global Hotkey Integration
+
+1. Application Menu Integration (.desktop file)
+To launch MyCompanion from your Linux application menu or dock (Budgie, MATE, GNOME, KDE, XFCE), create the following file:
+
+File path: ~/.local/share/applications/mycompanion.desktop
+
+```Ini, TOML
+[Desktop Entry]
+Type=Application
+Name=MyCompanion
+Comment=Personal Information Manager
+Exec=/home/user/dev/python/venv/bin/python /home/user/mycompanion.py
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;
+StartupNotify=true
+```
+
+(Note: Adjust the file paths to match your local virtual environment and Python script location).
+
+2. Native Wayland Global Shortcut (Ctrl+Space)
+Since global key-hooking libraries like pynput are restricted under Wayland, bind Ctrl+Space directly in your desktop environment's settings:
+
+* Open System Settings -> Keyboard -> Custom Shortcuts.
+
+* Add a new shortcut named MyCompanion.
+
+* Set Command to: `/home/geoffm/dev/python/venv/bin/python /home/geoffm/mycompanion.py`
+
+**or** if you want it to pop up every time you hit the shortcut key 
+    
+* Set Command to: `bash -c 'wmctrl -x -a mycompanion || /home/geoffm/dev/python/venv/bin/python /home/geoffm/mycompanion.py'`
+
+* Set Shortcut Key to: Ctrl + Space.
+
+
+Because MyCompanion includes built-in single-instance locking (mycompanion.lock), pressing your assigned shortcut key will either launch the application or bring the existing window to the foreground without spawning duplicate instances.   
+
+- Step 1: Identify Your Python Executable & Script PathMake sure you know the absolute path to your Python interpreter (or virtual environment) and your mycompanion.py script.Python binary: /home/geoffm/dev/python/venv/bin/python (or /usr/bin/python3)   Script path: /home/geoffm/mycompanion.py   
+- Step 2: Configure the Desktop Custom ShortcutDepending on your desktop environment (Budgie, MATE, GNOME, KDE, or XFCE), follow the steps below:
+
+### For Budgie / GNOME
+
+* Open System Settings $\rightarrow$ Keyboard.   
+* Scroll to the bottom and select View and Customize Shortcuts (or Custom Shortcuts).   
+* Click Add Shortcut (+).   
+* Fill in the fields:
+    - Name: MyCompanion   
+    - Command: /home/user/dev/python/venv/bin/python /home/geoffm/mycompanion.py   
+    - Shortcut: Press your desired hotkey combination (e.g., Ctrl + Space or Super + M).   
+    - Click Add.   
+
+### For MATE Desktop
+* Open Control Center $\rightarrow$ Keyboard Shortcuts.
+* Click Add.
+    - Set Name to MyCompanion.
+    - Set Command to /home/user/dev/python/venv/bin/python /home/user/mycompanion.py.   
+Highlight the newly created entry, click on the key sequence column, and press your desired hotkey combination.
+
+### For KDE Plasma
+
+* Open System Settings $\rightarrow$ Shortcuts $\rightarrow$ Custom Shortcuts.
+* Click Edit $\rightarrow$ New $\rightarrow$ Global Shortcut $\rightarrow$ Command/URL.
+    - Name it MyCompanion.
+    - In the Trigger tab, set your key combination.
+    - In the Action tab, enter /home/user/dev/python/venv/bin/python /home/user/mycompanion.py.   
+* Click Apply.
+
+---
+
 ## 💻 Navigation & Global Shortcuts
 
 Ctrl-space — Toggle application window to top / send to background (remains resident in memory; all state is saved).
+    (When running in X11 --toggle mode).
 
 Ctrl-q — Save state and quit mycompanion completely (removes daemon from memory).
 
@@ -196,13 +268,13 @@ https://mail.google.com
 ```
 
 
-# Calculator Input Reference Guide
+## Calculator Input Reference Guide
 
 The `mycompanion` calculator supports standard mathematical operations, inline trigonometric and advanced math functions, and flexible algebraic proportion equations.
 
 ---
 
-## 1. Standard Arithmetic & Operations
+### 1. Standard Arithmetic & Operations
 
 All basic Python arithmetic operators are supported out of the box.
 
@@ -217,7 +289,7 @@ All basic Python arithmetic operators are supported out of the box.
 
 ---
 
-## 2. Advanced Math Functions & Constants
+### 2. Advanced Math Functions & Constants
 
 Common mathematical functions and constants can be called directly without prefixing `math.`.
 
@@ -254,7 +326,7 @@ Trigonometric functions accept angles in **radians**. To evaluate using **degree
 
 ---
 
-## 3. Algebraic Proportion Ratios
+### 3. Algebraic Proportion Ratios
 
 The calculator automatically detects and solves proportion ratios for any non-numeric variable name or symbol (e.g., `x`, `price`, `target`, `?`). 
 
@@ -280,7 +352,7 @@ The unknown variable can occupy any of the four positions in the ratio:
 
 ---
 
-## 4. Complex Compound Expressions
+### 4. Complex Compound Expressions
 
 You can combine standard financial calculations, powers, and math built-ins into single-line entries:
 
