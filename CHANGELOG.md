@@ -1,3 +1,9 @@
+## 0.6.0 (2026-10-04)
+
+### Feat
+
+- **app-readme**: support dual desktop execution modes (windowed and TSR toggle)
+
 ## 0.5.1 (2026-09-29)
 
 ### Fix
