@@ -217,6 +217,8 @@ SYMBOL_MENU_CONFIG = {
         {"label": "[✓] Completed Task", "symbol": "[✓] "},
         {"label": "[✘] Eliminated Box", "symbol": "[✘] "},
         {"label": "[ ] Open Task Box", "symbol": "[ ] "},
+        {"label": "✓ Completed Task", "symbol": "✓"},
+        {"label": "✘ Eliminated Box", "symbol": "✘"},
     ],
     "Status, Time, & Scheduling": [
         # Status
@@ -2067,17 +2069,34 @@ class MiniSidekick:
 
         # File Links - Route through open_or_create_file instead of open_file_subwindow
         for idx, match in enumerate(re.finditer(r"\[(.*?)\]\((file://.*?)\)", content)):
-            tag_name = f"file_{idx}"
-            start = f"1.0 + {match.start()} chars"
-            end = f"1.0 + {match.end()} chars"
             file_path = match.group(2).replace("file://", "")
 
-            text_widget.tag_config(tag_name, foreground="#10B981", underline=True)
-            text_widget.tag_add(tag_name, start, end)
-            # Point to self.open_or_create_file here:
-            text_widget.tag_bind(tag_name, "<Button-1>", lambda e, p=file_path: self.open_or_create_file(p))
-            text_widget.tag_bind(tag_name, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
-            text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
+            full_start = f"1.0 + {match.start()} chars"
+            full_end = f"1.0 + {match.end()} chars"
+
+            # Position ranges:
+            # Bracketed label '[name]' starts at match.start() and spans length of '[' + group(1) + ']'
+            label_start = f"1.0 + {match.start()} chars"
+            label_end = f"1.0 + {match.start() + len(match.group(1)) + 2} chars"
+
+            label_tag = f"file_label_{idx}"
+            link_tag = f"file_link_{idx}"
+
+            # Base link styling (green for the entire link span, including file://...)
+            text_widget.tag_config(link_tag, foreground="#10B981", underline=True)
+            text_widget.tag_add(link_tag, full_start, full_end)
+
+            # Highlight [name] (brackets + word) in yellow without underline
+            text_widget.tag_config(label_tag, foreground="#FACC15", underline=False)
+            text_widget.tag_add(label_tag, label_start, label_end)
+
+            # Ensure yellow label takes precedence over the base link color
+            text_widget.tag_raise(label_tag)
+
+            # Bind events across the entire link span
+            text_widget.tag_bind(link_tag, "<Button-1>", lambda e, p=file_path: self.open_or_create_file(p))
+            text_widget.tag_bind(link_tag, "<Enter>", lambda e: text_widget.config(cursor="hand2"))
+            text_widget.tag_bind(link_tag, "<Leave>", lambda e: text_widget.config(cursor=""))
 
 
     def open_or_create_file(self, file_path):
@@ -2106,6 +2125,7 @@ class MiniSidekick:
         # 3. Default fallback for non-md files or when md_editor is blank
         self.open_file_subwindow(path)
 
+
     def open_file_subwindow(self, file_path, read_only=False):
         path = Path(file_path)
         try:
@@ -2124,7 +2144,7 @@ class MiniSidekick:
         colors = THEMES[self.current_theme_name]
         win.configure(bg=colors["bg"])
         self.sub_windows.append(win)
-        win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
+        # win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
 
         # Top Bar containing Path Header
         top_bar = tk.Frame(win, bg=colors["panel_bg"], pady=4, padx=10)
@@ -2169,6 +2189,7 @@ class MiniSidekick:
         )
         status_lbl.pack(side=tk.LEFT, padx=5)
 
+
         def save_file(event=None):
             if read_only or not path.exists():
                 return "break"
@@ -2182,7 +2203,18 @@ class MiniSidekick:
                 messagebox.showerror("Save Error", f"Could not save file:\n{err}")
             return "break"
 
-        win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
+        def on_close():
+            # Automatically save on close if it's not read-only
+            if not read_only:
+                save_file()
+            
+            if win in self.sub_windows:
+                self.sub_windows.remove(win)
+            win.destroy()
+
+        # win.protocol("WM_DELETE_WINDOW", lambda: (self.sub_windows.remove(win), win.destroy()))
+        # Bind the custom close handler to the window X button
+        win.protocol("WM_DELETE_WINDOW", on_close)
         editor.bind("<Control-s>", save_file)
         editor.bind("<Control-S>", save_file)
 
