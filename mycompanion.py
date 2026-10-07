@@ -2070,7 +2070,7 @@ class MiniSidekick:
             text_widget.tag_bind(tag_name, "<Leave>", lambda e: text_widget.config(cursor=""))
 
         # File Links - Route through open_or_create_file instead of open_file_subwindow
-        for idx, match in enumerate(re.finditer(r"\[(.*?)\]\((file://.*?)\)", content)):
+        for idx, match in enumerate(re.finditer(r"\[([^\]]+)\]\((file://.*?)\)", content)):
             file_path = match.group(2).replace("file://", "")
 
             full_start = f"1.0 + {match.start()} chars"
