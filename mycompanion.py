@@ -214,11 +214,13 @@ DEFAULT_CONFIG = {
 
 SYMBOL_MENU_CONFIG = {
     "Checkboxes": [
+        {"label": "[  ] Open Task Box", "symbol": "[  ] "},
         {"label": "[✓] Completed Task", "symbol": "[✓] "},
         {"label": "[✘] Eliminated Box", "symbol": "[✘] "},
-        {"label": "[ ] Open Task Box", "symbol": "[ ] "},
-        {"label": "✓ Completed Task", "symbol": "✓"},
-        {"label": "✘ Eliminated Box", "symbol": "✘"},
+        {"label": "[🗹] Completed Ballot", "symbol": "[🗹] "},
+        {"label": "[🗴] Eliminated Ballot", "symbol": "[🗴] "},
+        {"label": "✓ Completed", "symbol": "✓"},
+        {"label": "✘ Eliminated", "symbol": "✘"},
     ],
     "Status, Time, & Scheduling": [
         # Status
@@ -2822,14 +2824,41 @@ class MiniSidekick:
         full_shell_cmd = f"{cmd_str}{suffix}"
 
         # Parse geometry columns & rows for terminals needing explicit flags
-        cols, rows = ( geom.split("x") if "x" in geom else ("180", "40"))
+        if "x" in geom:
+            cols, remainder = geom.split("x", 1)
+            # Strip any trailing position offsets like "+325+28"
+            rows = remainder.split("+")[0].split("-")[0]
+        else:
+            cols, rows = "180", "40"
+        # Sanitize to clean integers
+        cols = cols.strip()
+        rows = rows.strip()
 
         # 2. Build explicit list of terminal options
         terminals = [
-            ("kitty", ["kitty", "-o", f"initial_window_width={cols}c", "-o", f"initial_window_height={rows}c", "--title", win_title, "bash", "-c", full_shell_cmd, ],),
-            ("xterm", [ "xterm", "-geometry", geom, "-T", win_title, "-e", "bash", "-c", full_shell_cmd, ],),
-            ("xfce4-terminal", [ "xfce4-terminal", f"--geometry={geom}", "-T", win_title, "-x", "bash", "-c", full_shell_cmd, ],),
-            ("ghostty", [ "ghostty", f"--title={win_title}", "-e", "bash", "-c", full_shell_cmd, ],),
+            (
+                "kitty",
+                [
+                    "kitty",
+                    "-o", f"remember_window_size=no",
+                    "-o", f"initial_window_width={cols}c",
+                    "-o", f"initial_window_height={rows}c",
+                    "--title", win_title,
+                    "bash", "-c", full_shell_cmd,
+                ],
+            ),
+            (
+                "xterm",
+                ["xterm", "-geometry", geom, "-T", win_title, "-e", "bash", "-c", full_shell_cmd],
+            ),
+            (
+                "xfce4-terminal",
+                ["xfce4-terminal", f"--geometry={geom}", "-T", win_title, "-x", "bash", "-c", full_shell_cmd],
+            ),
+            (
+                "ghostty",
+                ["ghostty", f"--title={win_title}", "-e", "bash", "-c", full_shell_cmd],
+            ),
         ]
 
         # Handle font overrides if specified in the future
@@ -2869,14 +2898,11 @@ class MiniSidekick:
 
         if open_in == "raw":
             self.open_raw(cmd_str)
-
         elif open_in == "terminal":
             geom = geometry or cfg_get(self.cfg, "Window", "geometry", "180x40")
             self.open_in_terminal(cmd_str, title=title, geometry=geom)
-
         elif open_in == "silent":
             subprocess.Popen( cmd_str, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
-
         else:
             # Standard 'window' mode output capture thread
             def _exec():

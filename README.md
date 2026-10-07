@@ -147,6 +147,83 @@ Highlight the newly created entry, click on the key sequence column, and press y
     - In the Action tab, enter /home/user/dev/python/venv/bin/python /home/user/mycompanion.py.   
 * Click Apply.
 
+
+#### Another alternative for launching mycompanion
+
+You can write a script (sensitive to the active desktop) that opens mycompanion with nohup: 
+
+```bash
+#!/bin/bash
+# bash script: toggle_mycompanion.sh
+# opens mycompanion to top windows using nohup
+# attempts to determine window manager first
+
+# App parameters
+APP_NAME="mycompanion"
+PYTHON_BIN="${HOME}/dev/python/venv/bin/python" # adjust as needed
+SCRIPT_PATH="${HOME}/mycompanion.py" # adjust as needed
+
+# Function to launch and fully detach from the terminal
+launch_app() {
+    nohup "$PYTHON_BIN" "$SCRIPT_PATH" >/dev/null 2>&1 &
+    disown
+}
+
+# Determine session type (Wayland vs. X11) or Desktop Environment
+SESSION="${XDG_SESSION_TYPE:-$DESKTOP_SESSION}"
+
+case "$SESSION" in
+    wayland)
+        case "$XDG_CURRENT_DESKTOP" in
+            *Wayfire*|*wayfire*)
+                WINDOW_ID=$(wayfire-ctl list-views 2>/dev/null | grep -i "$APP_NAME" | awk '{print $1}' | head -n 1)
+                if [ -n "$WINDOW_ID" ]; then
+                    wayfire-ctl focus-view "$WINDOW_ID"
+                else
+                    launch_app
+                fi
+                ;;
+            *)
+                if command -v wlrctl >/dev/null 2>&1; then
+                    wlrctl window focus "$APP_NAME" || launch_app
+                else
+                    pgrep -f "$SCRIPT_PATH" >/dev/null || launch_app
+                fi
+                ;;
+        esac
+        ;;
+
+    x11|x11-*)
+        if command -v wmctrl >/dev/null 2>&1; then
+            wmctrl -x -a "$APP_NAME" || launch_app
+        elif command -v xdotool >/dev/null 2>&1; then
+            xdotool search --onlyvisible --class "$APP_NAME" windowactivate || launch_app
+        else
+            pgrep -f "$SCRIPT_PATH" >/dev/null || launch_app
+        fi
+        ;;
+
+    *)
+        case "$XDG_CURRENT_DESKTOP" in
+            *Budgie*)
+                wmctrl -x -a "$APP_NAME" || launch_app
+                ;;
+            *Wayfire*)
+                WINDOW_ID=$(wayfire-ctl list-views 2>/dev/null | grep -i "$APP_NAME" | awk '{print $1}' | head -n 1)
+                if [ -n "$WINDOW_ID" ]; then
+                    wayfire-ctl focus-view "$WINDOW_ID"
+                else
+                    launch_app
+                fi
+                ;;
+            *)
+                pgrep -f "$SCRIPT_PATH" >/dev/null || launch_app
+                ;;
+        esac
+        ;;
+esac
+```
+
 ---
 
 ## 💻 Navigation & Global Shortcuts
