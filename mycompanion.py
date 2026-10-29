@@ -1511,7 +1511,8 @@ class MiniSidekick:
                 )
                 self.enable_ai = False  # Gracefully fall back to non-AI mode
 
-        self.root = tk.Tk(className="mycompanion")
+        self.root = tk.Tk(baseName="mycompanion",className="mycompanion")
+        self.root.tk.call("tk", "appname", "mycompanion")
 
         # Check external editor is configured and bind Ctrl-e
         editor_setting = self.cfg.get("Settings", {}).get("editor", "").strip().lower()
@@ -1657,11 +1658,17 @@ class MiniSidekick:
         self.calc_label = tk.Label(self.calc_input_container, text="Calculation: ", font=("Monospace", 14))
         self.calc_label.pack(side=tk.LEFT)
 
-        self.calc_display = tk.Entry(self.calc_input_container, font=("Monospace", 14), bd=0)
+        # self.calc_display = tk.Entry(self.calc_input_container, font=("Monospace", 14), bd=1, relief="solid", fg="#000000", bg="#ffffff")
+        self.calc_display = tk.Entry(
+              self.calc_input_container,
+              font=("Monospace", 14),
+              bd=1, relief="solid",
+              fg="#000000", bg="#ffffff"
+          )
         self.calc_display.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.calc_display.bind("<Return>", self.evaluate_calc)
 
-        self.calc_result = tk.Label(self.calc_frame, text="Type an expression and hit Enter (e.g., 45 * 12)", font=("Monospace", 10), fg="#888")
+        self.calc_result = tk.Label(self.calc_frame, text="Type an expression and hit Enter (e.g., 45 * 12 or 30/22=128/x)", font=("Monospace", 12), fg="#888")
         self.calc_result.pack(padx=15, anchor="w")
 
         self.calc_history_header = tk.Frame(self.calc_frame)
@@ -2523,7 +2530,8 @@ class MiniSidekick:
                 result = int(result) if result.is_integer() else round(result, 4)
             
             result_str = f"= {result}"
-            self.calc_result.config(text=result_str, fg="#4ec9b0")
+            # Changed fg to a high-visibility color (or remove 'fg=' to use default text color)
+            self.calc_result.config(text=result_str, fg="#ffffff", bg="#202020", bd=3, relief="solid")  # relief is failing here!
 
             history_entry = f"{expr}  -->  {result}\n"
             was_disabled = str(self.calc_history_text.cget("state")) == tk.DISABLED
@@ -2537,8 +2545,22 @@ class MiniSidekick:
                 self.calc_history_text.config(state=tk.DISABLED)
 
             self.calc_display.delete(0, tk.END)
+            # self.calc_result.config(text=result_str, fg="#4ec9b0")
+
+            # history_entry = f"{expr}  -->  {result}\n"
+            # was_disabled = str(self.calc_history_text.cget("state")) == tk.DISABLED
+            # if was_disabled:
+            #     self.calc_history_text.config(state=tk.NORMAL)
+
+            # self.calc_history_text.insert("1.0", history_entry)
+            # self.apply_link_parsing(self.calc_history_text)
+
+            # if was_disabled:
+            #     self.calc_history_text.config(state=tk.DISABLED)
+
+            # self.calc_display.delete(0, tk.END)
         except Exception:
-            self.calc_result.config(text="Invalid expression", fg="#f44747")
+            self.calc_result.config(text="Invalid expression", fg="#f44747", bg="#000000")
 
 
     def load_calendar(self):

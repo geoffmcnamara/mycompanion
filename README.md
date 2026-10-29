@@ -154,17 +154,17 @@ You can write a script (sensitive to the active desktop) that opens mycompanion 
 
 ```bash
 #!/bin/bash
-# bash script: toggle_mycompanion.sh
-# opens mycompanion to top windows using nohup
-# attempts to determine window manager first
 
 # App parameters
-APP_NAME="mycompanion"
-PYTHON_BIN="${HOME}/dev/python/venv/bin/python" # adjust as needed
-SCRIPT_PATH="${HOME}/mycompanion.py" # adjust as needed
+APP_NAME="mycompanion.py"
+CLASS_NAME="mycompanion"
+PYTHON_BIN="/home/geoffm/dev/python/venv/bin/python"
+SCRIPT_PATH="/home/geoffm/dev/python/mycompanion/mycompanion.py"
+LAUNCH_CMD="$PYTHON_BIN $SCRIPT_PATH"
 
 # Function to launch and fully detach from the terminal
 launch_app() {
+    echo "Launching $SCRIPT_PATH..."
     nohup "$PYTHON_BIN" "$SCRIPT_PATH" >/dev/null 2>&1 &
     disown
 }
@@ -176,16 +176,20 @@ case "$SESSION" in
     wayland)
         case "$XDG_CURRENT_DESKTOP" in
             *Wayfire*|*wayfire*)
-                WINDOW_ID=$(wayfire-ctl list-views 2>/dev/null | grep -i "$APP_NAME" | awk '{print $1}' | head -n 1)
-                if [ -n "$WINDOW_ID" ]; then
-                    wayfire-ctl focus-view "$WINDOW_ID"
-                else
-                    launch_app
-                fi
+                wlrctl window list
+                echo "Attempting to focus $APP_NAME in $SESSION"
+                wlrctl window focus title:"$APP_NAME" || launch_app
+                #WINDOW_ID=$(wayfire-ctl list-views 2>/dev/null | grep -i "$APP_NAME" | awk '{print $1}' | head -n 1)
+                #if [ -n "$WINDOW_ID" ]; then
+                    #wayfire-ctl focus-view "$WINDOW_ID"
+                #else
+                    #launch_app
+                #fi
                 ;;
             *)
+                echo "Now attempting to focus $APP_NAME"
                 if command -v wlrctl >/dev/null 2>&1; then
-                    wlrctl window focus "$APP_NAME" || launch_app
+                    wlrctl window focus app_id:"$APP_NAME" || launch_app
                 else
                     pgrep -f "$SCRIPT_PATH" >/dev/null || launch_app
                 fi
@@ -194,10 +198,11 @@ case "$SESSION" in
         ;;
 
     x11|x11-*)
+        echo "Attempting to focus $CLASS_NAME in $SESSION"
         if command -v wmctrl >/dev/null 2>&1; then
-            wmctrl -x -a "$APP_NAME" || launch_app
+            wmctrl -x -a "$CLASS_NAME" || launch_app
         elif command -v xdotool >/dev/null 2>&1; then
-            xdotool search --onlyvisible --class "$APP_NAME" windowactivate || launch_app
+            xdotool search --onlyvisible --class "$CLASS_NAME" windowactivate || launch_app
         else
             pgrep -f "$SCRIPT_PATH" >/dev/null || launch_app
         fi
